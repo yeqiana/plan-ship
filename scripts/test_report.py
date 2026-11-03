@@ -96,6 +96,37 @@ def _production_calls(node: ast.AST, functions: set[str], modules: set[str]) -> 
     return called
 
 
+def _grounded_python_assertion(expr: ast.AST, functions: set[str],
+                               modules: set[str], assigned: set[str]) -> bool:
+    """Find a structurally independent expectation, not a self-confirming comparison.
+
+    This is only a conservative *structural* check. Even a literal expectation
+    can be wrong: real business acceptance still requires negative controls.
+    """
+    if _obvious_true(expr):
+        return False
+    if isinstance(expr, ast.BoolOp):
+        # Only one independently observable branch is needed for this structural
+        # probe; _obvious_true has already rejected constant short circuits.
+        return any(_grounded_python_assertion(x, functions, modules, assigned)
+                   for x in expr.values)
+    if isinstance(expr, ast.Compare):
+        operands = [expr.left, *expr.comparators]
+        if any(ast.dump(a, include_attributes=False) == ast.dump(b, include_attributes=False)
+               for a, b in zip(operands, operands[1:])):
+            return False
+        observed = [bool(_production_calls(x, functions, modules) or
+                         assigned.intersection(n.id for n in ast.walk(x) if isinstance(n, ast.Name)))
+                    for x in operands]
+        # Comparing two outputs from the code under test is not an independent
+        # oracle; both can change together and still produce a green test.
+        return any(observed) and any(not x for x in observed)
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Not):
+        return _grounded_python_assertion(expr.operand, functions, modules, assigned)
+    return bool(_production_calls(expr, functions, modules) or
+                assigned.intersection(n.id for n in ast.walk(expr) if isinstance(n, ast.Name)))
+
+
 def _python_source_has_assertion(path: Path, test_name: str, workspace: Path) -> bool:
     try:
         tree = ast.parse(path.read_text(encoding='utf-8'))
@@ -109,8 +140,6 @@ def _python_source_has_assertion(path: Path, test_name: str, workspace: Path) ->
     functions, modules = _project_imports(tree, workspace, path)
     if not functions and not modules:
         return False
-    # Retain a conservative def-use relation: assertions must actually observe
-    # the output/state of an imported production call, not an unrelated constant.
     assigned: set[str] = set()
     for stmt in ast.walk(func):
         if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
@@ -119,13 +148,20 @@ def _python_source_has_assertion(path: Path, test_name: str, workspace: Path) ->
                 targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
                 for target in targets:
                     assigned.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
+    # Propagate simple aliases of production-derived values; comparing
+    # `expected = actual` with `actual` must not be an independent oracle.
+    for _ in range(4):
+        earlier = len(assigned)
+        for stmt in ast.walk(func):
+            if isinstance(stmt, (ast.Assign, ast.AnnAssign)) and isinstance(stmt.value, ast.Name) and stmt.value.id in assigned:
+                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+                for target in targets:
+                    assigned.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
+        if len(assigned) == earlier:
+            break
     for part in ast.walk(func):
-        if isinstance(part, ast.Assert):
-            if _obvious_true(part.test):
-                continue
-            referenced = {x.id for x in ast.walk(part.test) if isinstance(x, ast.Name)}
-            if _production_calls(part.test, functions, modules) or assigned & referenced:
-                return True
+        if isinstance(part, ast.Assert) and _grounded_python_assertion(part.test, functions, modules, assigned):
+            return True
         if isinstance(part, ast.With):
             for item in part.items:
                 ctx = item.context_expr
@@ -135,40 +171,95 @@ def _python_source_has_assertion(path: Path, test_name: str, workspace: Path) ->
     return False
 
 
+def _java_arguments(source: str, start: int) -> list[str] | None:
+    """Extract nested assertion arguments, rejecting incomplete parenthesis groups."""
+    depth, begin, args = 0, start, []
+    quote, escaped = None, False
+    for i in range(start, len(source)):
+        c = source[i]
+        if quote:
+            if escaped:
+                escaped = False
+            elif c == '\\':
+                escaped = True
+            elif c == quote:
+                quote = None
+            continue
+        if c in ('"', "'"):
+            quote = c
+        elif c == '(':
+            depth += 1
+            if depth == 1:
+                begin = i + 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                args.append(source[begin:i].strip())
+                return args
+        elif c == ',' and depth == 1:
+            args.append(source[begin:i].strip())
+            begin = i + 1
+    return None
+
+
 def _java_source_has_assertion(path: Path, test_name: str) -> bool:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding='utf-8')
     except (UnicodeError, OSError):
         return False
-    # Conservative Java/JUnit check. The annotation and method must appear together;
-    # read only the balanced method body, not arbitrary assertions elsewhere in class.
-    name = re.escape(test_name.split("[")[0].split("(")[0])
+    name = re.escape(test_name.split('[')[0].split('(')[0])
     for match in re.finditer(r"\b(?:void|[A-Za-z_][\w<>\[\]]*)\s+" + name + r"\s*\([^)]*\)\s*(?:throws\s+[\w., ]+\s*)?\{", text):
         prefix = text[max(0, match.start() - 350):match.start()]
         if not re.search(r"@(?:org\.junit\.(?:jupiter\.api\.)?)?Test\b", prefix):
             continue
         depth, start = 1, match.end()
         for pos in range(start, len(text)):
-            if text[pos] == "{":
-                depth += 1
-            elif text[pos] == "}":
+            if text[pos] == '{': depth += 1
+            elif text[pos] == '}':
                 depth -= 1
-                if depth == 0:
-                    body = text[start:pos]
-                    # A bare assertTrue(true)/assertEquals(1,1) is not proof.
-                    if re.search(r"\bassertTrue\s*\(\s*true\s*\)", body):
-                        body = re.sub(r"\bassertTrue\s*\(\s*true\s*\)\s*;?", "", body)
-                    if not re.search(r"\b(?:assert\w+|fail|verify|assertThat)\s*\(|\bassert\s+", body):
+                if depth != 0: continue
+                body = text[start:pos]
+                # Remove comments before extracting production calls/assertions.
+                body = re.sub(r'/\*.*?\*/|//[^\n]*', '', body, flags=re.S)
+                ignored = {'Assertions', 'Assert', 'assert', 'Mockito', 'System', 'Math',
+                           'Thread', 'List', 'Collections', 'Stream', 'Paths', 'Files',
+                           'logger', 'log', 'verify', 'assertThat'}
+                def business_calls(value: str) -> bool:
+                    return any(obj not in ignored and not method.startswith('assert') and
+                               method not in ('verify', 'fail', 'raises', 'mock', 'when', 'thenReturn', 'print', 'println')
+                               for obj, method in re.findall(r'\b([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\(', value))
+                variables = set()
+                for assign in re.finditer(r'\b([A-Za-z_]\w*)\s*=\s*([^;]+);', body):
+                    if business_calls(assign.group(2)):
+                        variables.add(assign.group(1))
+                for _ in range(4):
+                    start_count = len(variables)
+                    for assign in re.finditer(r'\b([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*;', body):
+                        if assign.group(2) in variables:
+                            variables.add(assign.group(1))
+                    if len(variables) == start_count:
                         break
-                    # Static heuristic: must invoke a non-assert business method in
-                    # the test method and link it to an expectation. Mockito-only
-                    # interactions and fixture setup do not qualify.
-                    calls = re.findall(r"\b([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\(", body)
-                    ignored = {'Assertions', 'Assert', 'assert', 'Mockito', 'System', 'Math', 'Thread', 'List', 'Collections', 'Stream', 'Paths', 'Files', 'logger', 'log', 'verify', 'assertThat'}
-                    business_calls = [(obj, method) for obj, method in calls if obj not in ignored and not method.startswith('assert') and method not in ('verify','fail','raises','mock','when','thenReturn','print','println')]
-                    if business_calls:
+                def depends(value: str) -> bool:
+                    return business_calls(value) or any(re.search(r'\b'+re.escape(v)+r'\b', value) for v in variables)
+                assertion = re.compile(r'\b(assertEquals|assertNotEquals|assertSame|assertNotSame|assertTrue|assertFalse|assertNull|assertNotNull|assertThrows|assertThat|verify)\s*\(')
+                for a in assertion.finditer(body):
+                    if a.group(1) == 'verify':
+                        continue  # Mockito verification alone is not a value oracle.
+                    args = _java_arguments(body, a.end()-1)
+                    if not args:
+                        continue
+                    if a.group(1) in ('assertEquals', 'assertNotEquals', 'assertSame', 'assertNotSame'):
+                        # JUnit supports message-first overloads; inspect the last
+                        # two comparison operands after removing a leading literal.
+                        compared = args[1:3] if len(args) >= 3 and args[0].strip().startswith('"') else args[:2]
+                        if len(compared) != 2 or compared[0] == compared[1]:
+                            continue
+                        if sum(bool(depends(x)) for x in compared) != 1:
+                            continue
                         return True
-                    break
+                    if any(depends(x) for x in args):
+                        return True
+                break
     return False
 
 
@@ -239,4 +330,4 @@ def validate_test_artifacts(report: Path, case_map: Path, workspace: Path, requi
             if not is_asserting:
                 errors.append(f"{case_id} 的测试源码没有可识别的断言（需要关联真实业务代码调用与预期行为）：{test_id} / {rel}")
             sources[source.relative_to(workspace).as_posix()] = sha256_file(source)
-    return errors, {"report_sha256": sha256_file(report), "case_map_sha256": sha256_file(case_map), "test_sources": sources, "verified_test_ids": sorted(used_ids)}
+    return errors, {"report_sha256": sha256_file(report), "case_map_sha256": sha256_file(case_map), "test_sources": sources, "verified_test_ids": sorted(used_ids), "assertion_check": "STRUCTURAL_CHECK_PASS_NOT_SEMANTIC_PROOF" if not errors else "BLOCKED"}

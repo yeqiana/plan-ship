@@ -137,7 +137,48 @@ def recover_transaction(folder: Path) -> str:
     if not txn.is_dir():
         raise DocumentError('事务状态损坏：不是目录')
     try:
-        manifest = json.loads((txn / 'journal.json').read_text(encoding='utf-8'))
+        journal = txn / 'journal.json'
+        if not journal.exists():
+            # No target write occurs before the journal is atomically published.
+            # Only our validated preparation marker can authorize cleanup; an
+            # unknown legacy orphan must be reviewed manually, not discarded.
+            files = list(txn.iterdir())
+            if not files:
+                _clear_transaction(txn)
+                return 'EMPTY_PREPARE_ABORTED'
+            prepare = txn / 'prepare.json'
+            if not prepare.exists() and all(re.fullmatch(r'\.prepare\.json\.\d+\.[a-f0-9]{8}\.tmp', x.name)
+                                            and x.is_file() and not x.is_symlink() for x in files):
+                # The PREPARE rename has not occurred; the publisher cannot
+                # have reached any target write. Only our known temp files are
+                # cleaned, never arbitrary user content.
+                _clear_transaction(txn)
+                return 'PREPARE_TEMP_ABORTED'
+            if not prepare.is_file() or prepare.is_symlink():
+                raise DocumentError('缺少 journal/prepare，无法证明目标文件未改动；需人工检查事务目录')
+            plan = json.loads(prepare.read_text(encoding='utf-8'))
+            if plan.get('schema') != 'prepare-v1' or not isinstance(plan.get('files'), list) or len(plan['files']) != 3:
+                raise DocumentError('prepare schema 损坏，不能自动清理')
+            permitted = {'prepare.json'} | {f'backup-{i}.bin' for i in range(3)}
+            # Atomic writes may leave known temporary names when a process is
+            # terminated before the final rename. No target writes occur until
+            # journal.json exists, so these are safe *if* the prepare check
+            # proves all originals are unchanged.
+            def known_prepare_temp(name: str) -> bool:
+                return bool(re.fullmatch(r'\.(?:prepare|journal)\.json\.\d+\.[a-f0-9]{8}\.tmp|\.restore-[a-f0-9]{16}', name))
+            if any((x.name not in permitted and not known_prepare_temp(x.name))
+                   or x.is_symlink() or not x.is_file() for x in files):
+                raise DocumentError('未记录的事务文件存在，拒绝自动删除')
+            for item in plan['files']:
+                relative = Path(item['path'])
+                target = folder / relative
+                if relative.is_absolute() or '..' in relative.parts or target.resolve().parent not in (folder.resolve(), (folder / '大白话解释').resolve()):
+                    raise DocumentError('prepare 目标路径不安全')
+                if _path_state(target) != item['before']:
+                    raise DocumentError('prepare 后用户文档被修改，拒绝自动清理')
+            _clear_transaction(txn)
+            return 'PREPARE_ABORTED_WITHOUT_TARGET_WRITES'
+        manifest = json.loads(journal.read_text(encoding='utf-8'))
         if manifest.get('schema') != 'v2.3' or len(manifest['files']) != 3:
             raise ValueError('事务日志 schema 不符')
         items = manifest['files']
@@ -199,21 +240,29 @@ def transactional_publish(folder: Path, payload: list[tuple[Path, bytes]]) -> No
         for index, (path, new) in enumerate(payload):
             safe_file(path)
             before = _path_state(path)
-            backup = f'backup-{index}.bin'
-            if before is not None:
-                _restore_atomic(txn / backup, path.read_bytes())
             entries.append({'path': path.relative_to(folder).as_posix(), 'before': before,
-                            'after': digest(new), 'backup': backup})
-        atomic(txn / 'journal.json', (json.dumps({'schema':'v2.3', 'files':entries}, ensure_ascii=False) + '\n').encode())
-        # journal is durable before any target changes
+                            'after': digest(new), 'backup': f'backup-{index}.bin'})
+        # PREPARE is written before *any* backup or journal writes, and before
+        # target mutation. Recovery can prove a pre-journal crash is harmless.
+        atomic(txn / 'prepare.json',
+               (json.dumps({'schema':'prepare-v1', 'files':entries}, ensure_ascii=False) + '\n').encode())
+        for item in entries:
+            if item['before'] is not None:
+                original = folder / item['path']
+                if _path_state(original) != item['before']:
+                    raise DocumentError('备份前用户文档发生变化，拒绝覆盖')
+                _restore_atomic(txn / item['backup'], original.read_bytes())
+        atomic(txn / 'journal.json',
+               (json.dumps({'schema':'v2.3', 'files':entries}, ensure_ascii=False) + '\n').encode())
+        # journal is durable before any target change
         for path, new in payload:
             atomic(path, new)
         _clear_transaction(txn)
     except BaseException:
-        if (txn / 'journal.json').is_file():
-            recover_transaction(folder)  # raises on non-recoverable manual modifications
-        else:
-            _clear_transaction(txn)
+        # A process kill cannot invoke this handler. The next explicit recover
+        # can handle a validated prepare-only orphan or a normal journal.
+        if txn.exists():
+            recover_transaction(folder)
         raise
 
 

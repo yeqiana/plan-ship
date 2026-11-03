@@ -64,6 +64,12 @@ python "$skillRoot\scripts\validate_docs.py" --type manual --workspace "$project
 
 **证据的信任边界：** 文件由本地执行器生成，但可由本地有写权限的人修改，记录自报覆盖也不能证明质量；它是防止漏项与陈旧结果的可核对门禁，不是不可伪造的安全证明。若需要抗篡改，可在受控 CI/runner 上加只追加日志、签名与命令策略，且仍需人工结果审查。
 
+## v1.3.1 补充：不接受自证正确的断言
+
+- `assert add(3,4) == add(3,4)` 即使真实 pytest PASS，仍没有独立业务预期，源码门禁必须拒绝；简单结果别名比较同样如此。
+- Java `service.calculate(...); assertEquals(1,1)` 不观察业务结果，也必须拒绝。有效用例应对实际结果提出与目标代码独立的预期（如 `assertEquals(7, service.calculate(3,4))`）。
+- 当前 Python/Java 静态校验输出的 `assertion_check=STRUCTURAL_CHECK_PASS_NOT_SEMANTIC_PROOF` **仅说明基本断言形态可识别**，不能作为 `ACCEPTANCE_PASS`。关键 TC 应在可丢弃副本里实施真实负向/变异控制，保留原通过记录、故障注入后的失败日志、恢复后通过结果及审查说明；不能完成则标 `未验证 / REVIEW_REQUIRED`。
+
 ## 业务行为真实性门禁（v2.3）
 
 - **源码层硬性校验**：Python 真实框架测试需引用项目内非测试模块并从业务函数调用得到断言结果，忽略恒真短路与无关常量；不能只 `import` 然后断言常量。Java/JUnit 源码检查同样拒绝仅有断言而未观察实际业务方法的用例。

@@ -64,9 +64,20 @@ def check(project: Path, load: bool = False, host: str | None = None) -> dict:
                   not x['found'] or x['ambiguous'] or (load and not (x['content_read'] or {}).get('read_ok'))
                   for x in result.values()) else 'READY_CORE_OPTIONAL_FILES_READ_AGENT_CONFIRMATION_REQUIRED'
               if load else 'READY_CORE_OPTIONAL_FILES_FOUND_AGENT_CONFIRMATION_REQUIRED')
-    return {'preflight_status': status, 'host': host or 'UNKNOWN', 'core_ready': True,
+    # Host invocation is inherently not observable from this file-system probe.
+    # If PlanShip is not even visible in the selected host, do not report READY.
+    own_skill = discover(project, 'plan-ship')
+    matches = [entry for entry in own_skill['matches'] if entry.get('skill_name') == 'plan-ship'
+               and host and entry['source'].startswith(host + '-')]
+    activation = 'NOT_VERIFIED' if matches else ('HOST_UNKNOWN' if not host else 'NOT_FOUND')
+    if host and not matches:
+        status = 'PLAN_SHIP_NOT_FOUND_CORE_CONTRACT_STILL_STANDALONE'
+    return {'preflight_status': status, 'host': host or 'UNKNOWN',
+            'core_has_no_external_dependencies': True,
+            'core_ready': False,  # Deprecated: never imply host readiness without actual activation.
+            'plan_ship_activated': activation, 'plan_ship_candidates': matches,
             'skills': result, 'note': 'No WebCodex, Python or auxiliary Skill is needed to USE PlanShip. '
-            'This optional diagnostic cannot verify real host invocation.'}
+            'This optional diagnostic cannot verify real host invocation or application of instructions.'}
 
 
 def main() -> int:

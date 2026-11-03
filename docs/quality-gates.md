@@ -21,6 +21,8 @@
 4. 产物绑定最终集成源码、方案版本、关键 `test-dir` 文件指纹和原始日志；不得使用过期报告。
 5. `pytest -q` 或 Maven 构建成功不自动代表业务验收成功；无运行条件明确报告 `BLOCKED`。
 
+**v1.3.1 判定规则：** `_python_source_has_assertion` / `_java_source_has_assertion` 只完成 `STRUCTURAL_CHECK_PASS_NOT_SEMANTIC_PROOF`。必须拒绝 `assert add(3,4)==add(3,4)`、`assertEquals(1,1)`、仅比较业务输出的简单别名等无独立预期的断言。P0 必须留下独立预期、可审查的反事实/变异负向测试（故意破坏业务行为时测试变红）、恢复后重新通过的证据。**自动结构检查通过不等于业务验收通过。**
+
 **不可当作通过的例子：** `echo PASS`、`assert True`、空测试、编译成功、手填 `manifest.json`、截图不存在却写“已截图”、Agent 自己声称“已手动验收”。
 
 ## 文档发布

@@ -33,14 +33,18 @@ def business_concepts(technical: str) -> list[str]:
 def evaluate(technical:str,plain:str)->list[str]:
     errors=[]
     concepts=business_concepts(technical)
+    # Exclude parenthetical keyword dumps from semantic anchor coverage. This
+    # deliberately remains a *heuristic*, never proof of reader comprehension.
+    narrative = re.sub(r'（[^）\n]*）|\([^()\n]*\)', '', plain)
+
     if not concepts:
         errors.append('大白话业务相关性 REVIEW_REQUIRED：技术版缺少“核心业务概念：...”明确锚点，不能以模板结构冒充业务解释通过')
     else:
-        main_content = re.split(r'(?m)^##\s+(?:术语|专业名词)', plain, maxsplit=1)[0]
+        main_content = re.split(r'(?m)^##\s+(?:术语|专业名词)', narrative, maxsplit=1)[0]
         missing=[x for x in concepts if x not in main_content]
         if missing:
             errors.append('大白话业务相关性不通过，正文缺少核心业务概念：'+', '.join(missing))
-        before_after = re.search(r'(?ms)^##\s+[^\n]*(?:改动前后|改造前后|之前和之后)[^\n]*\n(.*?)(?=^##\s+|\Z)', plain)
+        before_after = re.search(r'(?ms)^##\s+[^\n]*(?:改动前后|改造前后|之前和之后)[^\n]*\n(.*?)(?=^##\s+|\Z)', narrative)
         if before_after and concepts[0] not in before_after.group(1):
             errors.append('大白话改动前后缺少首个业务概念：'+concepts[0])
     if PLACEHOLDER.search(plain): errors.append('大白话文档含未替换的模板占位符')
@@ -74,7 +78,9 @@ def main()->int:
         errors=evaluate(args.technical.read_text(encoding='utf-8'),args.plain.read_text(encoding='utf-8'))
     except (OSError,UnicodeError) as exc:
         errors=[str(exc)]
-    print(json.dumps({'status':'PASS' if not errors else 'BLOCKED','errors':errors,'note':'结构与显式业务概念的文字覆盖检查，不等于真实读者理解或语义准确；仍需人工复核'},ensure_ascii=False,indent=2))
+    print(json.dumps({'status':'STRUCTURE_PASS_SEMANTIC_REVIEW_REQUIRED' if not errors else 'BLOCKED',
+                      'semantic_review':'REVIEW_REQUIRED', 'reader_validation':'NOT_VALIDATED',
+                      'errors':errors,'note':'自动检查只排除部分格式问题和显然的关键词堆砌，不能证明解释与业务事实一致；需要独立人工/模型复核，真人阅读须单独记录'},ensure_ascii=False,indent=2))
     return 2 if errors else 0
 
 if __name__=='__main__':

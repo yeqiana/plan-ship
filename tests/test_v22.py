@@ -197,6 +197,12 @@ class PreflightTests(unittest.TestCase):
         self.home = Path(self.tmp.name)
         self.ws = self.home / 'work'
         self.ws.mkdir()
+        # The diagnostic can report optional dependencies READY only when the
+        # primary Skill file itself is visible for that host.
+        for host_root in (self.home / '.agents' / 'skills', self.home / '.claude' / 'skills'):
+            primary = host_root / 'plan-ship'
+            primary.mkdir(parents=True)
+            (primary / 'SKILL.md').write_text('---\nname: plan-ship\n---\n', encoding='utf8')
 
     def test_missing_skills_blocks(self):
         with patch('discover_skills.roots', return_value=[('codex-user-modern', self.home / '.agents' / 'skills')]):

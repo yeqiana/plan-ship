@@ -138,6 +138,9 @@ class ContentAndBusinessTests(unittest.TestCase):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'skills'
+            primary = root / 'plan-ship'
+            primary.mkdir(parents=True)
+            (primary / 'SKILL.md').write_text('---\nname: plan-ship\n---\n', encoding='utf8')
             for name in ('code-pact', 'gen-ui'):
                 base = root / name
                 (base / 'references').mkdir(parents=True)

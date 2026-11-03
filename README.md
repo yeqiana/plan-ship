@@ -131,6 +131,12 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 The optional Python checks above are for maintainers, not mandatory when using the Skill. GitHub Actions runs the package and regression checks. **Passing this repository's tests is not a production acceptance certificate for a user's business system.** Host-level auto-invocation is separately covered by [manual evaluation](evals/manual-evaluation.md), and detailed gates are documented in [quality gates](docs/quality-gates.md).
 
+## v1.3.1 review fixes
+
+The optional validators now reject trivially self-confirming Python/Java assertions, distinguish structural checks from real semantic acceptance, and flag keyword-stuffed explanations for review. A controlled negative test that turns red when the implementation is deliberately broken is still required for critical paths. Route-file updates detect cooperative and observable concurrent changes; non-cooperating changes inside the final replace window cannot be guaranteed safe by a portable script. Preflight reports missing or unverified host activation rather than asserting readiness. The optional document publisher can recover validated pre-journal interruptions without deleting unknown user files.
+
+**The core Skill still requires no Python, WebCodex Runner, Git, MCP or additional Skills.** See [quality gates](docs/quality-gates.md).
+
 ## Boundaries
 
 - Ordinary PlanShip execution permits local Git changes but prohibits remote pushes, branches, and PRs unless the user gives a separate explicit instruction to perform those external actions.

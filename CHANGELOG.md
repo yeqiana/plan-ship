@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1 — 2026-11-03
+
+- Reject self-comparisons and simple aliases as business-test evidence in Python and Java; mark assertion checks as structural only, and require independent expected outcomes plus real P0 mutation/negative-control evidence for acceptance.
+- Detect parenthetical business-keyword dumps in explanatory copies and report `STRUCTURE_PASS_SEMANTIC_REVIEW_REQUIRED` rather than claiming automatic semantic or human-readable approval.
+- Add cooperative route-file locking, file identity/content conflict checks and preserved backups. Non-cooperating writes in the final rename window cannot be made universally atomic with portable Python; conflicting modifications must be investigated manually.
+- Correct the optional `preflight` contract: missing PlanShip is `NOT_FOUND`, visible files are not host activation proof, and deprecated `core_ready` no longer claims readiness.
+- Add a validated transaction PREPARE record and cautious recovery for pre-journal crashes; unexpected files or human edits remain `BLOCKED`.
+- Preserve the zero-required-dependency core workflow. New reverse tests and updated documentation cover the changes.
+
 ## 1.3.0 — 2026-11-03
 
 - Core PlanShip workflow no longer depends on WebCodex Runner, Python or optional Skills. Optional tools remain available without being a startup requirement.

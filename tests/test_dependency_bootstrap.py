@@ -43,6 +43,11 @@ class DependencyBootstrapTests(unittest.TestCase):
                 "commit", "-m", "test: add fixture")
             self.repos[name] = str(path)
 
+    def _install_primary_fixture(self):
+        primary = self.root / 'plan-ship'
+        primary.mkdir(exist_ok=True)
+        (primary / 'SKILL.md').write_text('---\nname: plan-ship\n---\n', encoding='utf8')
+
     def ensure(self, **kwargs):
         return ensure_dependencies(home=self.home, env={}, repositories=self.repos, host=kwargs.pop("host", "codex"), **kwargs)
 
@@ -65,6 +70,7 @@ class DependencyBootstrapTests(unittest.TestCase):
         self.assertEqual([], list(self.root.glob(".*-install-*")))
 
     def test_preflight_discovers_cloned_offline_fixtures(self):
+        self._install_primary_fixture()
         self.ensure()
         with patch.object(Path, "home", return_value=self.home):
             result = check(self.home, load=True, host='codex')
@@ -157,6 +163,7 @@ class DependencyBootstrapTests(unittest.TestCase):
         self.assertFalse((other / "code-pact").exists())
 
     def test_preflight_main_really_installs_missing_before_reading(self):
+        self._install_primary_fixture()
         import preflight
         with patch.object(Path, "home", return_value=self.home), \
              patch.object(preflight, "ensure_dependencies", side_effect=lambda **kw: self.ensure(**kw)), \
@@ -171,6 +178,7 @@ class DependencyBootstrapTests(unittest.TestCase):
                          [report["bootstrap"]["skills"][name]["status"] for name in REQUIRED])
 
     def test_preflight_read_only_opt_out_never_clones(self):
+        self._install_primary_fixture()
         import preflight
         with patch.object(Path, "home", return_value=self.home), \
              patch.object(preflight, "ensure_dependencies", side_effect=AssertionError("unexpected install")), \
@@ -184,6 +192,7 @@ class DependencyBootstrapTests(unittest.TestCase):
         self.assertFalse((self.root / "code-pact").exists())
 
     def test_legacy_folder_with_new_skill_id_does_not_duplicate(self):
+        self._install_primary_fixture()
         import preflight
         old = self.root / "previous-local-folder"
         old.mkdir()

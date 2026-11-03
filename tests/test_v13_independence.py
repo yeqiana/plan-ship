@@ -26,6 +26,8 @@ class StandaloneTests(unittest.TestCase):
         self.ws=self.home/'project';self.ws.mkdir()
         self.codex=self.home/'.agents'/'skills';self.codex.mkdir(parents=True)
         self.claude=self.home/'.claude'/'skills';self.claude.mkdir(parents=True)
+        primary=self.codex/'plan-ship';primary.mkdir()
+        (primary/'SKILL.md').write_text('---\nname: plan-ship\n---\n',encoding='utf8')
 
     def _skill(self,root,name):
         p=root/name;p.mkdir()
@@ -35,7 +37,8 @@ class StandaloneTests(unittest.TestCase):
     def test_core_standalone_no_optional_skills(self):
         with patch('discover_skills.roots',return_value=[('codex-user-modern',self.codex),('claude-user',self.claude)]):
             value=preflight.check(self.ws,host='codex',load=True)
-        self.assertTrue(value['core_ready'])
+        self.assertFalse(value['core_ready'])
+        self.assertEqual('NOT_VERIFIED',value['plan_ship_activated'])
         self.assertEqual('READY_CORE_WITH_OPTIONAL_WARNINGS',value['preflight_status'])
         self.assertFalse(value['skills']['gen-ui']['found'])
         self.assertFalse(value['skills']['code-pact']['found'])
@@ -88,7 +91,6 @@ class StandaloneTests(unittest.TestCase):
         self.assertEqual('UNKNOWN',value['source_trust'])
 
     def test_directory_race_never_replaces_preexisting_target(self):
-        self._skill(self.codex,'plan-ship')
         source=self.home/'repo';source.mkdir()
         (source/'SKILL.md').write_text('---\nname: gen-ui\n---\n',encoding='utf8')
         class CP:
