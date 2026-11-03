@@ -1,3 +1,5 @@
+> **Nontechnical companion / English overview.** Every final technical Markdown document has an identically numbered companion in the stable `大白话解释/` folder. Use the reader's language, explain why, before/after, relevant analogy, annotated steps/diagram, verification, failure cases, risks and jargon. Preserve exact test/acceptance status. Static readability validation cannot prove a human understood the content.
+
 # 大白话解释：一份技术文档必须有一个可追溯的易懂副本
 
 ## 强制规则

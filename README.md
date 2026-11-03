@@ -2,9 +2,13 @@
 
 [简体中文](README.zh-CN.md) | **English**
 
-> A reviewable plan → implement → real test → accept workflow for Codex and Claude Code.
+> An evidence-driven AI coding workflow for Codex and Claude Code: implementation plans, two review rounds, minimal code changes, real tests, and acceptance.
 
 **PlanShip** is a reusable AI Coding Skill, not a background agent, test framework, or project manager. It insists on a reviewed plan, the smallest sufficient code change, genuine test evidence, and understandable handoff documents. Installed files alone do not prove an AI agent actually invoked the Skill.
+
+**Use PlanShip when** you need more than a prompt for coding: a reviewed implementation and test plan, a trustworthy post-integration validation trail, and a handoff people can verify. It provides **plan / execute / full workflow** modes. See the [FAQ](docs/faq.md), [workflow architecture](docs/architecture.md), and [real Java negative-control example](examples/java-order-total/README.md).
+
+**Not a guarantee:** automatic Skill activation, test correctness, production acceptance, Google indexing and AI recommendations require their own evidence. PlanShip's checks do not make an autonomous agent, replace JUnit or certify results. The normative Skill rules are English-first; **formal plan validators still require Chinese section/review field labels**, so fully English structured plans are not yet supported. [Language contract](docs/language-policy.md).
 
 ## Why it exists
 
@@ -49,7 +53,15 @@ Your host may use a different Skills root. Start a fresh agent session after ins
 
 ## Usage
 
-Codex:
+Codex, **English**:
+
+```text
+$plan-ship plan: Inspect this Java repository, present a scoped implementation, test and acceptance plan, and complete two substantive review/revision rounds before publishing it.
+$plan-ship execute: Implement the reviewed plan with minimal changes; run real integrated tests and produce a manual verification guide with a readable companion.
+$plan-ship all: Plan, review, implement, test and accept this feature without making unsupported PASS claims.
+```
+
+Codex, **Chinese**:
 
 ```text
 $plan-ship 方案编写：Review the existing Java project, draft a minimal implementation/test/acceptance plan, then run two real improvement rounds.
@@ -117,6 +129,19 @@ GitHub Actions runs the same package and regression checks. **Passing this repos
 - Printed `PASS`, empty tests, stale reports and unchecked business behavior never count as acceptance.
 - No invented screenshots, image assets or human verification results.
 - It adapts rendering to the actually loaded `intelligent-ui` Skill; CLI Markdown fallback is expected.
+
+## Explore / source of truth
+
+- [English FAQ — common Codex / Claude Code questions](docs/faq.md)
+- [Architecture and workflow gates](docs/architecture.md)
+- [PlanShip vs templates, coding guardrails and test frameworks](docs/comparison.md)
+- [Reproducible Java example with an intentionally failing negative control](examples/java-order-total/README.md)
+- [Language policy / 语言规范](docs/language-policy.md)
+- [Evidence-first GEO / discoverability methodology](docs/geo-methodology.md)
+- [GitHub About / Topics recommendations and verification](docs/github-metadata.md)
+- [Fixed discovery evaluation prompts — initial status NOT MEASURED](evals/discovery-baseline.md)
+
+**Canonical repository:** https://github.com/yeqiana/plan-ship . `SKILL.md` is the single normative Skill entry. Markdown examples and SEO documents must never override its safety or evidence rules. Do not treat search discoverability as a measured success without real observations.
 
 ## Project layout
 

@@ -1,3 +1,5 @@
+> **Skill discovery / English overview.** Search current-user Codex and Claude default Skill directories before workspace Skills and host/plugin registries; record actual paths and competing versions. File discovery, content reading, host activation and Agent compliance are distinct facts. Unreadable required dependencies block execution.
+
 # 默认 Skill 发现（全局先搜，项目与宿主随后）
 
 优先级：**先搜索** Codex 与 Claude 默认本地目录；命中并不代表自动覆盖当前宿主真正生效的版本。所有候选只读，先检查 `SKILL.md`，确认名称与所在目录，必要时读取所引用的 `references/`。无论引用哪种辅助 Skill，都先做相同的检索。

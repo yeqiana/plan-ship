@@ -1,3 +1,5 @@
+> **Plan module / English overview.** Before analyzing, really load prerequisite Skills. Review actual repository code, attachments, optional fixtures and existing edits. Present a complete v0 plan, then perform two distinct evidence-backed review/revision cycles with a final recheck. Keep scope minimal and publish paired, stable-numbered Markdown. Plan-only mode never writes business code.
+
 # 模块 A：方案编写执行细则
 
 ## A0 输入核验

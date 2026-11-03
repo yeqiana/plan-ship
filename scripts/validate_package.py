@@ -18,7 +18,12 @@ REQUIRED_FILES = (
     "scripts/validate_evidence.py", "scripts/validate_package.py",
     "tests/test_tools.py", "tests/test_v24.py", "tests/test_package_contract.py",
     "docs/quality-gates.md", "docs/migration.md", "examples/quickstart.md",
-    "evals/manual-evaluation.md",
+    "evals/manual-evaluation.md", "evals/discovery-baseline.md",
+    "docs/faq.md", "docs/architecture.md", "docs/comparison.md",
+    "docs/language-policy.md", "docs/geo-methodology.md", "docs/github-metadata.md",
+    "examples/java-order-total/README.md", "examples/java-order-total/src/OrderTotal.java",
+    "examples/java-order-total/src/OrderTotalCheck.java",
+    "tests/test_java_example.py", "tests/test_discovery_contract.py",
 )
 TEXT_SUFFIXES = {".md", ".py", ".yaml", ".yml", ".json", ".txt", ".ps1"}
 SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".venv", "dist", "evidence"}
@@ -89,12 +94,15 @@ def validate(root: Path) -> list[str]:
         content = skill.read_text(encoding="utf-8")
         if not re.match(r"\A---\nname: plan-ship\n", content):
             failures.append("SKILL.md 的正式 name 不是 plan-ship")
-        for marker in ("$plan-ship", "/plan-ship", "ai-coding-collaboration", "intelligent-ui", "test-dir", "两轮", "BLOCKED"):
+        for marker in ("$plan-ship", "/plan-ship", "ai-coding-collaboration", "intelligent-ui", "test-dir", "两轮", "BLOCKED", "implementation plan", "acceptance", "review", "genuine", "No fake"):
             if marker not in content:
                 failures.append(f"SKILL.md 缺少关键约束：{marker}")
     manifest = root / "agents/openai.yaml"
-    if manifest.is_file() and "$plan-ship" not in manifest.read_text(encoding="utf-8"):
-        failures.append("agents/openai.yaml 未使用正确 Codex 调用名")
+    if manifest.is_file():
+        meta = manifest.read_text(encoding="utf-8")
+        for marker in ("$plan-ship", "ai-coding-collaboration", "intelligent-ui", "plan", "test", "acceptance", "方案"):
+            if marker not in meta:
+                failures.append(f"agents/openai.yaml 缺少双语发现信息：{marker}")
     route = root / "scripts/route_manager.py"
     if route.is_file() and "plan-ship:route:start" not in route.read_text(encoding="utf-8"):
         failures.append("route_manager.py 未使用新路由标识")
@@ -105,10 +113,19 @@ def validate(root: Path) -> list[str]:
             for marker in ("$plan-ship", "plan-ship.git", "validate_package.py", "manual-evaluation.md"):
                 if marker not in text:
                     failures.append(f"{name} 缺少安装、校验或行为说明：{marker}")
+    english = root / "README.md"
+    if english.is_file():
+        readme = english.read_text(encoding="utf-8")
+        for marker in ("docs/faq.md", "docs/comparison.md", "docs/geo-methodology.md", "examples/java-order-total/README.md", "$plan-ship plan:"):
+            if marker not in readme:
+                failures.append(f"README.md 缺少发现性文档或英文调用：{marker}")
+    baseline = root / "evals/discovery-baseline.md"
+    if baseline.is_file() and "NOT MEASURED" not in baseline.read_text(encoding="utf-8"):
+        failures.append("发现性基线必须保留未测量状态，不能伪造 GEO 指标")
     flow = root / ".github/workflows/validate.yml"
     if flow.is_file():
         text = flow.read_text(encoding="utf-8")
-        for marker in ("validate_package.py", "unittest discover", "pip install pytest"):
+        for marker in ("validate_package.py", "unittest discover", "pip install pytest", "setup-java@v4"):
             if marker not in text:
                 failures.append(f"GitHub Actions 缺少真实校验：{marker}")
     return failures

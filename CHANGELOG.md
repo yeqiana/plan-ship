@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 — 2026-11-03
+
+- English-first authoritative `SKILL.md`, bilingual activation keywords and Codex discovery description; preserved the Chinese workflow modes, folder identifiers and safety gates.
+- Added evidence-first FAQ, workflow architecture, neutral comparisons, language contract and GEO methodology with a fixed evaluation prompt set. No invented indexing or AI mention measurements.
+- Added a small runnable Java smoke harness with an actual negative-control failure and automated tests; this does not constitute acceptance of a user's project.
+- Added a Java-enabled CI step and repository discoverability contract checks. Suggested GitHub About/Topics must be separately applied and verified.
+
 ## 1.0.0 — 2026-11-03
 
 - 独立产品命名为 **PlanShip**，正式 Skill ID、调用名和路由标记统一为 `plan-ship`。

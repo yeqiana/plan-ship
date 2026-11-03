@@ -1,3 +1,5 @@
+> **Gate sequencing / English overview.** Gate order is Skills → initial plan → R1 review/revision → R2 review/revision → plan release → test-case addendum if required → implementation/integration → real tests → acceptance → manually reproducible guide with two review rounds. A structural PASS is not a business acceptance PASS.
+
 # 门禁设计与证据边界 v2
 
 ## 流程

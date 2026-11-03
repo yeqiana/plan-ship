@@ -149,6 +149,19 @@ CI 同样运行静态结构校验和完整回归测试。业务验收另需在�
 - **不会伪造证据：** 没运行就写“未执行”，测试失败就写失败；静态断言扫描不能保证任意业务测试的意义。
 - **不会强制生成图片：** 使用普通 Markdown、Mermaid 和文本图解，让 GitHub、VS Code 与 CLI 都能阅读；不会把不存在的截图写成已采集。
 
+## 国际化与 GEO（AI 搜索可发现性）
+
+PlanShip 采用**英文权威 Skill 规范 + 中文关键词兼容 + 中英双语 README**。英文调用支持 `$plan-ship plan`、`$plan-ship execute`、`$plan-ship all`；中文版仍支持 `方案编写`、`方案实施测试验收`、`全流程`。所有核心验收门禁及中文 `大白话解释/` 兼容目录保持不变。
+
+- [英文常见问题 FAQ](docs/faq.md)：面向 Codex、Claude Code 与 AI 搜索的真实问答。
+- [能力边界与对比](docs/comparison.md)：明确 PlanShip 不是自动 Agent 引擎，也不能替代测试框架。
+- [执行架构图](docs/architecture.md)：每一道 Gate 的真实作用。
+- [可复现 Java 示例](examples/java-order-total/README.md)：实际运行正确逻辑，并验证故意修改后的错误逻辑会被测试捕获。
+- [国际化约定](docs/language-policy.md) / [GEO 实施原则](docs/geo-methodology.md) / [GitHub 推荐元数据](docs/github-metadata.md)。
+- [GEO 检索基线问题集](evals/discovery-baseline.md)：初始状态为 `NOT MEASURED`，不能自报 GEO 权重或 AI 推荐率。
+
+英文化不意味着已经在 Codex/Claude 原生宿主验证了自动触发，也不意味着已被 Google 或任何 AI 搜索平台收录。仓库文档通过与业务项目测试通过是不同的事。
+
 ## 仓库内容
 
 `SKILL.md` 为主规则；`agents/openai.yaml` 为 Codex 元数据；`references/` 为详细约束；`assets/templates/` 为模板；`scripts/` 为可执行校验工具；`tests/` 为自动回归；`docs/`、`examples/`、`evals/` 为使用与人工验收材料。

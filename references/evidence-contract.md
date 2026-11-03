@@ -1,3 +1,5 @@
+> **Test evidence contract / English overview.** Plan validation, real test execution and evidence validation are separate operations. Use fresh framework-generated JUnit XML and logs from the final integrated source tree, map tests to actual production behavior and assertions, bind source/plan/fixture hashes and block incomplete cases. A machine-generated record can be tampered with and is not proof of complete semantic coverage.
+
 # v2.3 严格真实测试证据协议（保留 v2.1 测试数据 schema）
 
 核心区分：`validate_docs.py` 是文档结构和轮次校验；`run_and_record.py` 是严格执行器（需要 pytest/Maven/Gradle 实际产生 JUnit XML 并关联断言）；`validate_evidence.py` 验证**当前代码快照、计划版本、测试执行文件及需求链路的一致性**。这三者都不能替代独立代码评审、实际功能检查或用户的后续人工复验。

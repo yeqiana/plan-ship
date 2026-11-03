@@ -1,4 +1,8 @@
-# PlanShip 仓库开发约定
+# PlanShip repository development guidance / 仓库开发约定
+
+This file guides maintainers only. The authoritative user-facing Skill contract is [`SKILL.md`](SKILL.md), not this file. Keep translations semantically equivalent, avoid keyword stuffing, preserve `ai-coding-collaboration` and `intelligent-ui` dependencies, and never claim unobserved GEO/search rankings or host invocations. Run the package and full tests before release; publish only explicitly scoped changes.
+
+## 中文开发约定
 
 仅约束**维护本仓库**的 Coding Agent，不替代安装到业务工程后的 `SKILL.md`。
 

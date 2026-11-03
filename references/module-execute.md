@@ -1,3 +1,5 @@
+> **Implementation and acceptance module / English overview.** Validate the reviewed plan first. If test cases are missing, draft and improve them through two review rounds before implementation, then update the plan. Assign non-overlapping worktree ownership, merge locally, test the final integrated tree, validate fresh real test evidence and only then publish the manual acceptance guide plus its readable companion. Never claim user-performed checks are complete.
+
 # 模块 B v2.2：实施测试验收具体操作顺序
 
 ## B0 先校验方案

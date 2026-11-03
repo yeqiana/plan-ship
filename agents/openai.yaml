@@ -1,6 +1,6 @@
 interface:
   display_name: "PlanShip"
-  short_description: "方案编写、评审补强、真实实施测试和手动验收双闭环"
-  default_prompt: "使用 $plan-ship 分析此项目的新需求。先确认 ai-coding-collaboration 与 intelligent-ui 的真实加载状态，自动盘点 test-dir；需要关键外部文件但缺失时只询问一次；方案评审两轮、最小改动、真实测试证据、易懂的大白话解释。"
+  short_description: "Evidence-driven planning, review, testing & acceptance / 方案评审、真实测试与验收"
+  default_prompt: "Use $plan-ship for this coding task. Load ai-coding-collaboration before analyzing code and intelligent-ui before rendering. Inspect real project files and optional test-dir; ask once only for essential missing fixtures. Deliver a scoped plan with two substantive review/revision rounds, minimal implementation, genuine test evidence, and a manual acceptance guide with an understandable companion. For Chinese requests, follow 方案编写、方案实施测试验收、全流程 and 大白话解释 rules; never fake PASS or push remotely without explicit permission."
 policy:
   allow_implicit_invocation: true

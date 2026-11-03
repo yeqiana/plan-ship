@@ -1,3 +1,5 @@
+> **Intelligent UI compatibility / English overview.** Load the actual installed intelligent-ui Skill and apply its effective host rules. Terminal-only hosts should get complete, copyable Markdown; never invent rendered controls, charts or screenshots. Layout should never conceal real tests, failures or blockers.
+
 # Intelligent UI 适配（强依赖）
 
 ## 必须先发现
