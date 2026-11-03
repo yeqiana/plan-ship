@@ -1,58 +1,31 @@
-# PlanShip dependencies: official sources and safe automatic installation
+# Optional integrations and dependency-free core / 可选集成
 
-PlanShip has two **required, distinct** Skills. These are the canonical IDs and repositories; don't replace them with other names in new docs or project guidance.
+**PlanShip v1.3 works standalone.** Its only activation condition is that the host actually loads `plan-ship/SKILL.md`. The workflow does **not** require WebCodex Runner, Python, Git, MCP, or any other Skill.
 
-| Skill ID | Purpose | Canonical GitHub source |
-| --- | --- | --- |
-| `code-pact` | Scope discipline, minimal sufficient changes, risk and review boundaries | [yeqiana/code-pact](https://github.com/yeqiana/code-pact) |
-| `gen-ui` | Markdown, diagrams and output presentation | [yeqiana/gen-ui](https://github.com/yeqiana/gen-ui) |
+| Optional Skill | Repository | Enhancement |
+|---|---|---|
+| `code-pact` | [yeqiana/code-pact](https://github.com/yeqiana/code-pact) | Change-scoping and review conventions |
+| `gen-ui` | [yeqiana/gen-ui](https://github.com/yeqiana/gen-ui) | Markdown and presentation guidance |
 
-## Automatic bootstrap (default when PlanShip's preflight is invoked)
+PlanShip embeds its own minimal scope, evidence, plain-language and non-fake-test rules. If both optional Skills are absent, **continue normally**. Do not infer that a Skill in the *other* host's installation has been loaded by the current host.
 
-Before any business project analysis, PlanShip must discover existing installed Skills and try to install **missing** dependencies via `scripts/preflight.py`. The installer uses a fixed allowlist of these two HTTPS clone URLs (no arbitrary URL/user-provided repository input):
+## Optional Python tools
+
+`preflight.py`, `doc_registry.py`, `validate_docs.py`, `validate_evidence.py` and `plain_quality.py` require Python 3.11+ **only if you explicitly run them**. Native file tooling can write paired Markdown files without Python, but must not claim atomic, checked publication or automated evidence validation when those helpers were not executed.
+
+The optional discovery command is **read-only by default**:
 
 ```text
-https://github.com/yeqiana/code-pact.git
-https://github.com/yeqiana/gen-ui.git
+python scripts/preflight.py --project <project> --host codex --read-content --json
 ```
 
-The destination is an **already existing**, valid Codex or Claude user Skills root. If PlanShip is installed within one of the discovered roots, that root takes priority; otherwise the first existing root is selected in this order:
+Only after explicit user approval, install optional Skills into an existing Skills directory **for the specified host**, not another host:
 
-1. `~/.agents/skills` (Codex modern)
-2. `${CODEX_HOME:-~/.codex}/skills` (Codex legacy)
-3. `~/.claude/skills` (Claude user)
-
-If both Codex and Claude have separate valid Skills roots, install PlanShip in the relevant host root and launch its preflight **from that host**. Installations do not automatically propagate across unrelated host roots. The installer refuses to create new Agent / Skills roots. It also refuses a Windows SYSTEM service profile; run it as the actual user's host process. Project-local and plugin-provided Skills may already satisfy the dependency without a clone, subject to the host's actual rules.
-
-```powershell
-# Default: ensure missing dependencies (network/write only if missing); then read and hash.
-python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --json
-
-# Pure read-only diagnostics: never install.
-python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --no-auto-install --json
-
-# Direct safe bootstrap (same official allowlist):
-python "$HOME\.agents\skills\plan-ship\scripts\ensure_dependencies.py" --json
+```text
+python scripts/preflight.py --project <project> --host codex --install-optional --json
+# or --host claude
 ```
 
-Use the real PlanShip installation path when it differs from these examples.
+The allowlisted Git sources are `https://github.com/yeqiana/code-pact.git` and `https://github.com/yeqiana/gen-ui.git`. The script rejects Windows SYSTEM profiles, missing host roots, symlink targets, wrong Skill names, mismatched Git origins, clone failures, and concurrent target-directory creation. Existing non-Git copies are reported as **`PRESENT_UNVERIFIED`**, not certified official. Even a matching Git origin does not certify file integrity or runtime activation. New optional installs record checked-out revision hashes; no script in a cloned Skill is executed automatically.
 
-## Safety and failure behavior
-
-- **No automatic overwrites.** If `code-pact/` or `gen-ui/` already exists, verify its frontmatter. If missing, wrong, or unsafe, stop with `BLOCKED_CONFLICT` and require a human to resolve it.
-- **No new Agent roots.** If none exists, return `BLOCKED_NO_EXISTING_SKILLS_ROOT` instead of creating one.
-- **No arbitrary shell commands in cloned Skills.** Installation downloads files only and verifies each cloned `SKILL.md` declares the expected ID. An Agent must separately inspect and load the actual rules. Never run scripts from an unreviewed clone.
-- **Fail closed.** Git unavailability, source mismatch, network failure, permission denial or race => `BLOCKED`, with no false claim of success. Git authentication is handled by the user's existing environment; don't print credentials or embed tokens in clone URLs.
-- **Atomic staging.** Clone into a temporary folder under the selected root, validate, and only then rename into the final directory. On errors, remove only the temporary folder, not user-owned files.
-- **Sources are moving targets.** A newly cloned `main` is not a pinned release. The installer records the checked-out commit SHA for audit; projects needing a locked dependency set should approve exact revisions and audit the GitHub repositories independently. This file is not a supply-chain security certification.
-- **Host truth matters.** `INSTALLED` proves a filesystem clone, not that Codex/Claude automatically selected it, read its references, or followed the instructions. `preflight.py --read-content` only demonstrates the helper's reads. The Agent must perform its own host-specific confirmation before continuing.
-- **Legacy aliases.** A dependency stored under an obsolete folder name is never automatically deleted or renamed; an additional candidate may require host-specific manual selection. Leave all user files untouched.
-
-## Required startup sequence
-
-1. Discover PlanShip and dependencies in actual host and workspace registrations.
-2. If a dependency is missing from standard installed locations, run default preflight/auto-bootstrap.
-3. If Git/network/target verification fails, mark `BLOCKED` and do not begin analysis.
-4. Re-discover the installed dependencies and check versions/any competing candidates.
-5. Have the Agent actually load **code-pact first**, then **gen-ui** (including required references). An installer or preflight checker must never claim the host loaded them.
-6. Only then analyze the business project, inspect test fixtures, draft the plan, and proceed through the established evidence/review gates.
+If install fails, **the optional install attempt fails**, but PlanShip's self-contained plan and review process remains usable. No automatic network requests or silent downloads occur during ordinary PlanShip invocation.

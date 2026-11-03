@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-11-03
+
+- Core PlanShip workflow no longer depends on WebCodex Runner, Python or optional Skills. Optional tools remain available without being a startup requirement.
+- Removed silent optional-Skill download; isolated host-specific discovery and explicit opt-in install, fixed no-replace install race and source-trust labeling.
+- Added SYSTEM route protection and document business-concept anchors; extended adversarial tests and H-05 coverage.
+
 ## 1.2.0 — 2026-11-03
 
 - Replace former required Skill identifiers with `code-pact` and `gen-ui` in all active contracts and tests.

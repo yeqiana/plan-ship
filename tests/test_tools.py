@@ -79,7 +79,12 @@ def publish_test_doc(workspace: Path, name: str, key: str, title: str, content: 
 def fill_template(name: str) -> str:
     text = (ROOT / "assets" / "templates" / name).read_text(encoding="utf8")
     counter = iter(range(1, 200))
-    return re.sub(r"\{\{[^{}\n]*\}\}", lambda m: f"实际代码 src/main/Task.java 第{next(counter)}处逻辑、输入和预期校验已写清", text)
+    result = re.sub(r"\{\{[^{}\n]*\}\}", lambda m: f"实际代码 src/main/Task.java 第{next(counter)}处逻辑、输入和预期校验已写清", text)
+    if "核心业务概念：" in result:
+        result = re.sub(r'(?m)^- 核心业务概念：.*$', '- 核心业务概念：新需求', result)
+    else:
+        result += "\n核心业务概念：新需求\n"
+    return result
 
 
 def run(*cmd, cwd=None):

@@ -104,8 +104,11 @@ def validate(root: Path) -> list[str]:
             if marker not in bootstrap:
                 failures.append(f"依赖自动安装器缺少安全门禁：{marker}")
     preflight = root / "scripts/preflight.py"
-    if preflight.is_file() and "--no-auto-install" not in preflight.read_text(encoding="utf-8"):
-        failures.append("前置检查缺少只读诊断开关 --no-auto-install")
+    if preflight.is_file():
+        preflight_source = preflight.read_text(encoding="utf-8")
+        for marker in ('--install-optional', '--host', 'OPTIONAL_INSTALL_FAILED_CORE_STILL_AVAILABLE'):
+            if marker not in preflight_source:
+                failures.append(f"前置检查缺少无依赖安全语义：{marker}")
     manifest = root / "agents/openai.yaml"
     if manifest.is_file():
         meta = manifest.read_text(encoding="utf-8")
@@ -115,6 +118,8 @@ def validate(root: Path) -> list[str]:
     route = root / "scripts/route_manager.py"
     if route.is_file() and "plan-ship:route:start" not in route.read_text(encoding="utf-8"):
         failures.append("route_manager.py 未使用新路由标识")
+    if "No WebCodex Runner, Python or third-party Skill" not in (skill.read_text(encoding="utf-8") if skill.is_file() else ""):
+        failures.append("PlanShip 核心必须可独立执行，不得强制要求 WebCodex Runner/Python/其他 Skill")
     for name in ("README.md", "README.zh-CN.md"):
         path = root / name
         if path.is_file():

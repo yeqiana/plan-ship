@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -56,14 +57,16 @@ def current_host_skill_root(roots: list[Path]) -> Path | None:
     return None
 
 
-def select_skill_root(roots: list[Path]) -> Path | None:
-    effective = current_host_skill_root(roots)
-    if effective is not None:
-        return effective
-    installed = [r for r in roots if (r / "plan-ship" / "SKILL.md").is_file()
-                 and metadata_name(r / "plan-ship" / "SKILL.md") == "plan-ship"
-                 and not is_link_or_junction(r / "plan-ship")]
-    return installed[0] if installed else (roots[0] if roots else None)
+def select_skill_root(roots: list[Path], host: str | None = None) -> Path | None:
+    """Select only a root belonging to explicitly selected host (no cross-host fallback)."""
+    if host not in ('codex', 'claude'):
+        return None
+    relevant = [r for r in roots if (r.parent.name == '.claude') == (host == 'claude')
+                and r.name == 'skills']
+    installed = [r for r in relevant if (r / 'plan-ship' / 'SKILL.md').is_file()
+                 and metadata_name(r / 'plan-ship' / 'SKILL.md') == 'plan-ship'
+                 and not is_link_or_junction(r / 'plan-ship')]
+    return installed[0] if installed else relevant[0] if len(relevant) == 1 else None
 
 
 def _system_profile(home: Path) -> bool:
@@ -94,8 +97,11 @@ def _install_one(name: str, url: str, root: Path) -> dict:
                 if existing_remote not in allowed:
                     return {"status": "BLOCKED_CONFLICT", "path": str(target), "repository": url,
                             "error": "Existing Git Skill has a different or unreadable origin; no overwrite."}
-            return {"status": "PRESENT", "path": str(target / "SKILL.md"), "repository": url,
-                    "note": "Present Skill was not overwritten; host must still load and verify it."}
+            verified_git = (target / ".git").exists()
+            return {"status": "PRESENT_MATCHING_ORIGIN" if verified_git else "PRESENT_UNVERIFIED",
+                    "path": str(target / "SKILL.md"), "repository": url if verified_git else None,
+                    "source_trust": "GIT_ORIGIN_MATCH_ONLY_NOT_CONTENT_VERIFIED" if verified_git else "UNKNOWN",
+                    "note": "Existing Skill was never overwritten; a matching name or Git remote is not proof of trusted content."}
         return {"status": "BLOCKED_CONFLICT", "path": str(target), "repository": url,
                 "error": "Target already exists but its Skill name or path is unsafe; manual review required."}
     # Use staging within the validated existing root. Never clone directly into the final target.
@@ -107,6 +113,10 @@ def _install_one(name: str, url: str, root: Path) -> dict:
             if not source.is_file() or is_link_or_junction(source) or metadata_name(source) != name:
                 return {"status": "BLOCKED_INVALID_SOURCE", "repository": url,
                         "error": f"Cloned repository SKILL.md did not declare name: {name}."}
+            # Never dereference untrusted symlinked repository contents during copy.
+            if any(p.is_symlink() or is_link_or_junction(p) for p in checkout.rglob('*')):
+                return {"status": "BLOCKED_INVALID_SOURCE", "repository": url,
+                        "error": "Repository contains symlink/junction entries; manual inspection required."}
             remote = _run_git(["-C", str(checkout), "remote", "get-url", "origin"]).stdout.strip()
             if remote != url:
                 return {"status": "BLOCKED_INVALID_SOURCE", "repository": url,
@@ -115,7 +125,17 @@ def _install_one(name: str, url: str, root: Path) -> dict:
             if target.exists() or target.is_symlink() or is_link_or_junction(target):
                 return {"status": "BLOCKED_CONFLICT", "path": str(target), "repository": url,
                         "error": "Another process created the target during installation."}
-            checkout.rename(target)
+            # copytree with dirs_exist_ok=False performs an exclusive mkdir(target).
+            # Even on POSIX, it must not rename over an empty directory created by another process.
+            try:
+                shutil.copytree(checkout, target, dirs_exist_ok=False)
+            except FileExistsError:
+                return {"status": "BLOCKED_CONFLICT", "path": str(target), "repository": url,
+                        "error": "Target was created concurrently; no overwrite performed."}
+            except (OSError, shutil.Error) as error:
+                # Do NOT delete a partially copied target: it may contain concurrent user edits.
+                return {"status": "BLOCKED_PARTIAL_INSTALL", "path": str(target),
+                        "repository": url, "error": type(error).__name__ + "; inspect target manually"}
             return {"status": "INSTALLED", "path": str(target / "SKILL.md"),
                     "repository": url, "revision": revision,
                     "note": "Installation alone does NOT demonstrate the Agent actually loaded the Skill."}
@@ -126,7 +146,8 @@ def _install_one(name: str, url: str, root: Path) -> dict:
 
 def ensure_dependencies(home: Path | None = None, env: Mapping[str, str] | None = None,
                         names: tuple[str, ...] | None = None,
-                        repositories: Mapping[str, str] | None = None) -> dict:
+                        repositories: Mapping[str, str] | None = None,
+                        host: str | None = None) -> dict:
     """Install missing allowlisted Skills into ONE existing host root; no host root creation.
 
     Test-only callers may inject a local repository mapping; the CLI never permits this.
@@ -136,27 +157,39 @@ def ensure_dependencies(home: Path | None = None, env: Mapping[str, str] | None 
     configured = dict(REPOSITORIES if repositories is None else repositories)
     if not set(wanted).issubset(REPOSITORIES) or not set(wanted).issubset(configured):
         raise ValueError("Only PlanShip's two known dependency names can be installed.")
+    if host not in ('codex', 'claude'):
+        return {"status": "BLOCKED_HOST_UNKNOWN", "root": None, "skills": {},
+                "error": "Explicit --host codex|claude is required for optional installation."}
     if _system_profile(home):
         return {"status": "BLOCKED_SYSTEM_PROFILE", "root": None, "skills": {},
                 "error": "Windows service SYSTEM profile is not an interactive Agent home; use the real user's Agent environment."}
     roots = existing_skill_roots(home, env)
-    root = select_skill_root(roots)
+    selected = [r for r in roots if ((r / 'plan-ship' / 'SKILL.md').is_file()
+                and metadata_name(r / 'plan-ship' / 'SKILL.md') == 'plan-ship')]
+    if host == 'codex':
+        choices = [r for r in roots if r == home / '.agents' / 'skills'
+                   or r == Path((env or {}).get('CODEX_HOME') or (home / '.codex')) / 'skills']
+    else:
+        choices = [r for r in roots if r == home / '.claude' / 'skills']
+    local = [r for r in selected if r in choices]
+    root = local[0] if local else (choices[0] if len(choices) == 1 else None)
     if root is None:
         return {"status": "BLOCKED_NO_EXISTING_SKILLS_ROOT", "root": None, "skills": {},
                 "error": "No existing Codex/Claude Skills root; refusing to create a new Agent directory."}
     output = {name: _install_one(name, configured[name], root) for name in wanted}
-    ok = all(item["status"] in ("PRESENT", "INSTALLED") for item in output.values())
+    ok = all(item["status"] in ("PRESENT_UNVERIFIED", "PRESENT_MATCHING_ORIGIN", "INSTALLED") for item in output.values())
     return {"status": "INSTALLED_OR_PRESENT_AGENT_LOAD_REQUIRED" if ok else "BLOCKED",
             "root": str(root), "skills": output,
             "checked_roots": [str(p) for p in roots],
-            "note": "The host/Agent must read and apply code-pact and gen-ui before project analysis; clone alone is not loading."}
+            "note": "Optional integration only. No Agent must install these Skills to use PlanShip. An existing Skill is not a verified source."}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--host", required=True, choices=('codex', 'claude'))
     args = parser.parse_args()
-    result = ensure_dependencies()
+    result = ensure_dependencies(host=args.host)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

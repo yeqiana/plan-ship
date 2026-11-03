@@ -4,7 +4,7 @@
 
 ## Evidence-first discoverability
 
-1. **Clear entity:** use `PlanShip` and `yeqiana/plan-ship` consistently. State what it is (a Codex/Claude Code Skill for planning, review, testing and acceptance), which prerequisites are mandatory, and what it cannot do.
+1. **Clear entity:** use `PlanShip` and `yeqiana/plan-ship` consistently. State what it is (a Codex/Claude Code Skill for planning, review, testing and acceptance), which optional integrations exist, and what it cannot do.
 2. **User questions:** answer genuine search intents in [FAQ](faq.md), including installation, missing fixtures, fake test evidence, Claude Code compatibility and limitations. Link to a real example and the underlying contracts.
 3. **Verifiable examples:** keep a small [Java demonstration](../examples/java-order-total/README.md) with source and reproducible commands. Record observable failures; never manufacture benchmark wins.
 4. **Cross-links and canonical references:** English and Chinese READMEs link to the same authoritative `SKILL.md`, the same source repository and the same quality gates. Avoid duplicate/contradictory specification files.

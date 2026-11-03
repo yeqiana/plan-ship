@@ -1,4 +1,4 @@
-> **Plan module / English overview.** Before analyzing, really load prerequisite Skills. Review actual repository code, attachments, optional fixtures and existing edits. Present a complete v0 plan, then perform two distinct evidence-backed review/revision cycles with a final recheck. Keep scope minimal and publish paired, stable-numbered Markdown. Plan-only mode never writes business code.
+> **Plan module / English overview.** Before analyzing, really load PlanShip itself; other Skills are optional. Review actual repository code, attachments, optional fixtures and existing edits. Present a complete v0 plan, then perform two distinct evidence-backed review/revision cycles with a final recheck. Keep scope minimal and publish paired, stable-numbered Markdown. Plan-only mode never writes business code.
 
 # 模块 A：方案编写执行细则
 
@@ -13,7 +13,7 @@
 3. 指令：`AGENTS.md`、`CLAUDE.md`、仓库编码约定、测试规范（存在时读取）。
 4. 用户附件：记录名称、用途、关键约束。无法读取则写明，不猜内容。
 5. `test-dir/`：存在时读取与需求相关文件清单，不存在直接跳过。
-6. **在开始 A0 项目分析前**先完成 P0：实际加载 `code-pact` 再加载 `gen-ui`；任一缺失必须 BLOCKED，不允许推测技能内容。
+6. **在开始 A0 项目分析前**先完成 P0：实际加载 `plan-ship`；`code-pact` 和 `gen-ui` 为可选增强，缺失不阻断，不允许推测技能内容。
 
 ## A1 v0 初版输出
 

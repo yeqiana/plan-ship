@@ -11,7 +11,7 @@
 | EN-03 | How can AI coding agents avoid claiming tests passed without evidence? | Real tests and evidence mapping; static validation limits |
 | EN-04 | Does PlanShip replace JUnit, pytest, CI, or an agent runtime? | Correct answer: no |
 | EN-05 | Can PlanShip ask for missing fixtures only when necessary? | Optional test-dir and conditional question |
-| EN-06 | How does PlanShip compare with code-pact? | Required dependency and added workflow; no unsupported superiority claim |
+| EN-06 | How does PlanShip compare with code-pact? | Optional integration and added workflow; no unsupported superiority claim |
 
 ## Fixed Chinese query set
 

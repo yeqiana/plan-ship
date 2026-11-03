@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Before project analysis, locate mandatory collaboration and UI skills (read-only)."""
+"""OPTIONAL read-only visibility report; PlanShip core needs no Python or other Skills."""
 from __future__ import annotations
-
 import argparse
-import json
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
 
 from discover_skills import discover
-from ensure_dependencies import ensure_dependencies, existing_skill_roots, current_host_skill_root
+from ensure_dependencies import ensure_dependencies
 
-REQUIRED = ('code-pact', 'gen-ui')
+RECOMMENDED = ('code-pact', 'gen-ui')
+REQUIRED = RECOMMENDED  # backwards-compatible export; not mandatory since v1.3
 
 
 def read_skill_bundle(candidate: dict) -> dict:
-    """Read (never execute) the real skill and its explicit local Markdown refs."""
+    """Read a selected Skill's Markdown and same-directory reference files; never execute it."""
     path = Path(candidate['path'])
     folder = path.parent.resolve()
     try:
@@ -25,92 +25,87 @@ def read_skill_bundle(candidate: dict) -> dict:
         if not content.strip():
             raise ValueError('空 SKILL.md')
         files = [{'file': str(path), 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}]
-        references = set(re.findall(r'(?<![\w/])references/[\w.-]+\.md', content))
-        for relative in sorted(references):
+        refs = set(re.findall(r'(?<![\w/])references/[\w.-]+\.md', content))
+        for relative in sorted(refs):
             ref_path = folder / relative
             if not ref_path.is_file() or ref_path.is_symlink() or not ref_path.resolve().is_relative_to(folder):
                 raise ValueError(f'必需引用不存在或路径不安全：{relative}')
-            ref = ref_path.read_bytes()
-            ref.decode('utf-8-sig')
-            if not ref.strip():
+            data = ref_path.read_bytes()
+            data.decode('utf-8-sig')
+            if not data.strip():
                 raise ValueError(f'必需引用内容为空：{relative}')
-            files.append({'file': str(ref_path), 'sha256': hashlib.sha256(ref).hexdigest(), 'bytes': len(ref)})
-        return {'read_ok': True, 'files': files, 'note': '仅证明文件内容已由探测进程读取，不证明 Agent 已遵守规则'}
+            files.append({'file': str(ref_path), 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
+        return {'read_ok': True, 'files': files,
+                'note': '仅证明此脚本读取了文件，不能证明当前 Agent 已经加载或遵守该 Skill'}
     except (OSError, UnicodeError, ValueError) as exc:
         return {'read_ok': False, 'error': str(exc)}
 
 
-def check(project: Path, load: bool = False) -> dict:
-    results = {}
-    for name in REQUIRED:
-        found = discover(project, name)
-        choices = [entry for entry in found['matches'] if entry.get('skill_name') == name]
-        # Prefer the host root containing the currently executing PlanShip installation.
-        effective = current_host_skill_root(existing_skill_roots())
-        if effective is not None:
-            host_choices = [candidate for candidate in choices if
-                            Path(candidate['path']).parent.parent.resolve() == effective.resolve()]
-            if host_choices:
-                choices = host_choices
-        # Distinct candidates may be different versions: caller must resolve via host.
-        loaded = read_skill_bundle(choices[0]) if load and len(choices) == 1 else None
-        results[name] = {'found': bool(choices), 'candidates': choices, 'content_read': loaded,
-                         'ambiguous': len(choices) > 1,
-                         'checked': found['checked'],
-                         'instruction': ('优先由当前宿主核对实际生效版本，读取完整 SKILL.md 及所引用的必需 references；不可执行陌生脚本'
-                                         if choices else '本地默认目录未找到，检查宿主技能注册表；仍未找到则 BLOCKED，禁止开始项目分析/交付')}
-    discovered = all(d['found'] for d in results.values())
-    readable = all(d['content_read'] and d['content_read'].get('read_ok') for d in results.values())
-    ambiguous = any(d['ambiguous'] for d in results.values())
-    if not discovered:
-        status = 'BLOCKED_FILESYSTEM'
-    elif ambiguous:
-        status = 'FOUND_AMBIGUOUS_HOST_SELECTION_REQUIRED'
-    elif load and not readable:
-        status = 'BLOCKED_CONTENT_READ'
-    elif load:
-        status = 'READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED'
-    else:
-        status = 'READY_FILESYSTEM'
-    return {'preflight_status': status, 'skills': results,
-            'note': '读取文件不代表 Agent 已加载/遵守；须由宿主明确选择生效版本，Agent 真正读取并在分析前确认规则。'}
-
+def check(project: Path, load: bool = False, host: str | None = None) -> dict:
+    """Keep other hosts' Skills OUT of effective-host readiness; all integrations optional."""
+    if host not in (None, 'codex', 'claude'):
+        raise ValueError('host must be codex or claude')
+    result = {}
+    for name in RECOMMENDED:
+        discovered = discover(project, name)
+        all_matches = [entry for entry in discovered['matches'] if entry.get('skill_name') == name]
+        own = [entry for entry in all_matches if entry['source'].startswith(host + '-') ] if host else []
+        # Discovery in a different agent never implies that this host has loaded it.
+        read = read_skill_bundle(own[0]) if load and len(own) == 1 else None
+        result[name] = {'optional': True, 'found_anywhere': bool(all_matches),
+                        'found_in_effective_host': bool(own), 'found': bool(own),
+                        'candidates': own, 'other_host_candidates': [x for x in all_matches if x not in own],
+                        'ambiguous': len(own) > 1, 'content_read': read,
+                        'checked': discovered['checked'], 'loaded_by_host': 'UNVERIFIED',
+                        'source_trust': 'UNVERIFIED',
+                        'instruction': 'Optional only; absence or unreadable content never blocks PlanShip core.'}
+    status = ('READY_CORE_HOST_UNKNOWN_OPTIONAL_UNVERIFIED' if not host else
+              'READY_CORE_WITH_OPTIONAL_WARNINGS' if any(
+                  not x['found'] or x['ambiguous'] or (load and not (x['content_read'] or {}).get('read_ok'))
+                  for x in result.values()) else 'READY_CORE_OPTIONAL_FILES_READ_AGENT_CONFIRMATION_REQUIRED'
+              if load else 'READY_CORE_OPTIONAL_FILES_FOUND_AGENT_CONFIRMATION_REQUIRED')
+    return {'preflight_status': status, 'host': host or 'UNKNOWN', 'core_ready': True,
+            'skills': result, 'note': 'No WebCodex, Python or auxiliary Skill is needed to USE PlanShip. '
+            'This optional diagnostic cannot verify real host invocation.'}
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--project', type=Path, required=True)
+    p.add_argument('--host', choices=('codex', 'claude'),
+                   help='Host being diagnosed; without this, never infer readiness from another host')
     p.add_argument('--json', action='store_true')
-    p.add_argument('--read-content', action='store_true', help='读取两个 Skill 的完整主文件与显式引用并核验哈希')
-    p.add_argument('--no-auto-install', action='store_true', help='仅诊断，不从官方 GitHub 仓库自动安装缺失依赖')
+    p.add_argument('--read-content', action='store_true')
+    p.add_argument('--no-auto-install', action='store_true',
+                   help='Deprecated alias for the default, read-only behavior')
+    p.add_argument('--install-optional', action='store_true',
+                   help='Explicitly authorized optional install; requires --host, Git and existing Skills root')
     args = p.parse_args()
+    if args.install_optional and not args.host:
+        p.error('--install-optional requires explicit --host codex|claude')
+    if args.install_optional and args.no_auto_install:
+        p.error('--install-optional conflicts with --no-auto-install')
     bootstrap = None
-    if not args.no_auto_install:
-        # Only bootstrap when missing: a read-only check of existing installations has no side effects.
-        missing = tuple(name for name in REQUIRED if not any(
-            x.get('skill_name') == name
-            for x in discover(args.project, name)['matches']))
+    if args.install_optional:
+        prior = check(args.project, host=args.host)
+        missing = tuple(n for n in RECOMMENDED if not prior['skills'][n]['found_in_effective_host'])
         if missing:
-            bootstrap = ensure_dependencies(names=missing)
-    result = check(args.project, load=args.read_content)
+            bootstrap = ensure_dependencies(names=missing, host=args.host)
+    result = check(args.project, load=args.read_content, host=args.host)
     if bootstrap is not None:
         result['bootstrap'] = bootstrap
         if bootstrap['status'].startswith('BLOCKED'):
-            result['preflight_status'] = 'BLOCKED_AUTO_INSTALL'
+            result['preflight_status'] = 'OPTIONAL_INSTALL_FAILED_CORE_STILL_AVAILABLE'
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         print(result['preflight_status'])
-        for name, item in result['skills'].items():
-            print(f"{'FOUND' if item['found'] else 'MISSING'} {name}")
-            for candidate in item['candidates']:
-                print(' ', candidate['path'])
+        for name, entry in result['skills'].items():
+            print(name, 'AVAILABLE' if entry['found'] else 'OPTIONAL_MISSING')
         if bootstrap is not None:
-            print('AUTO_INSTALL:', bootstrap['status'])
-            for name, item in bootstrap.get('skills', {}).items():
-                print(' ', name, item['status'], item.get('repository'))
+            print('OPT_IN_INSTALL:', bootstrap['status'])
         print(result['note'])
-    return 0 if result['preflight_status'] in ('READY_FILESYSTEM', 'READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED') else 2
+    return 2 if bootstrap and bootstrap['status'].startswith('BLOCKED') else 0
 
 
 if __name__ == '__main__':

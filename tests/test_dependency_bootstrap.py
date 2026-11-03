@@ -44,7 +44,7 @@ class DependencyBootstrapTests(unittest.TestCase):
             self.repos[name] = str(path)
 
     def ensure(self, **kwargs):
-        return ensure_dependencies(home=self.home, env={}, repositories=self.repos, **kwargs)
+        return ensure_dependencies(home=self.home, env={}, repositories=self.repos, host=kwargs.pop("host", "codex"), **kwargs)
 
     def test_verified_canonical_sources(self):
         self.assertEqual(REQUIRED, tuple(REPOSITORIES))
@@ -61,14 +61,14 @@ class DependencyBootstrapTests(unittest.TestCase):
             self.assertTrue((self.root / name / "SKILL.md").exists())
             self.assertEqual(self.repos[name], git("-C", str(self.root / name), "remote", "get-url", "origin"))
         again = self.ensure()
-        self.assertEqual(["PRESENT", "PRESENT"], [again["skills"][n]["status"] for n in REQUIRED])
+        self.assertEqual(["PRESENT_MATCHING_ORIGIN", "PRESENT_MATCHING_ORIGIN"], [again["skills"][n]["status"] for n in REQUIRED])
         self.assertEqual([], list(self.root.glob(".*-install-*")))
 
     def test_preflight_discovers_cloned_offline_fixtures(self):
         self.ensure()
         with patch.object(Path, "home", return_value=self.home):
-            result = check(self.home, load=True)
-        self.assertEqual("READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED", result["preflight_status"])
+            result = check(self.home, load=True, host='codex')
+        self.assertEqual("READY_CORE_OPTIONAL_FILES_READ_AGENT_CONFIRMATION_REQUIRED", result["preflight_status"])
         for name in REQUIRED:
             self.assertTrue(result["skills"][name]["content_read"]["read_ok"])
 
@@ -77,7 +77,7 @@ class DependencyBootstrapTests(unittest.TestCase):
         alternate.mkdir(parents=True)
         (alternate / "plan-ship").mkdir()
         (alternate / "plan-ship" / "SKILL.md").write_text("---\nname: plan-ship\n---\n", encoding="utf8")
-        result = self.ensure()
+        result = self.ensure(host="claude")
         self.assertEqual(str(alternate), result["root"])
         self.assertTrue((alternate / "gen-ui" / "SKILL.md").exists())
         self.assertFalse((self.root / "gen-ui").exists())
@@ -106,7 +106,7 @@ class DependencyBootstrapTests(unittest.TestCase):
         (folder / "SKILL.md").write_text("---\nname: code-pact\n---\n", encoding="utf8")
         with patch("ensure_dependencies._run_git", side_effect=AssertionError("must not call Git")):
             result = self.ensure(names=("code-pact",))
-        self.assertEqual("PRESENT", result["skills"]["code-pact"]["status"])
+        self.assertEqual("PRESENT_UNVERIFIED", result["skills"]["code-pact"]["status"])
 
     def test_existing_git_with_different_origin_is_blocked(self):
         first = self.ensure(names=("code-pact",))
@@ -137,7 +137,7 @@ class DependencyBootstrapTests(unittest.TestCase):
 
     def test_system_profile_is_not_treated_as_user_home(self):
         result = ensure_dependencies(home=Path("C:/Windows/System32/config/systemprofile"), env={},
-                                     repositories=self.repos)
+                                     repositories=self.repos, host="codex")
         self.assertEqual("BLOCKED_SYSTEM_PROFILE", result["status"])
 
     def test_invalid_dependency_name_is_rejected(self):
@@ -160,12 +160,12 @@ class DependencyBootstrapTests(unittest.TestCase):
         import preflight
         with patch.object(Path, "home", return_value=self.home), \
              patch.object(preflight, "ensure_dependencies", side_effect=lambda **kw: self.ensure(**kw)), \
-             patch.object(sys, "argv", ["preflight.py", "--project", str(self.home), "--read-content", "--json"]), \
+             patch.object(sys, "argv", ["preflight.py", "--project", str(self.home), "--host", "codex", "--install-optional", "--read-content", "--json"]), \
              redirect_stdout(io.StringIO()) as capture:
             code = preflight.main()
         self.assertEqual(0, code)
         report = json.loads(capture.getvalue())
-        self.assertEqual("READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED", report["preflight_status"])
+        self.assertEqual("READY_CORE_OPTIONAL_FILES_READ_AGENT_CONFIRMATION_REQUIRED", report["preflight_status"])
         self.assertEqual("INSTALLED_OR_PRESENT_AGENT_LOAD_REQUIRED", report["bootstrap"]["status"])
         self.assertEqual(["INSTALLED", "INSTALLED"],
                          [report["bootstrap"]["skills"][name]["status"] for name in REQUIRED])
@@ -175,12 +175,12 @@ class DependencyBootstrapTests(unittest.TestCase):
         with patch.object(Path, "home", return_value=self.home), \
              patch.object(preflight, "ensure_dependencies", side_effect=AssertionError("unexpected install")), \
              patch.object(sys, "argv", ["preflight.py", "--project", str(self.home),
-                                        "--read-content", "--no-auto-install", "--json"]), \
+                                        "--host", "codex", "--read-content", "--json"]), \
              redirect_stdout(io.StringIO()) as capture:
             code = preflight.main()
-        self.assertEqual(2, code)
+        self.assertEqual(0, code)
         report = json.loads(capture.getvalue())
-        self.assertEqual("BLOCKED_FILESYSTEM", report["preflight_status"])
+        self.assertEqual("READY_CORE_WITH_OPTIONAL_WARNINGS", report["preflight_status"])
         self.assertFalse((self.root / "code-pact").exists())
 
     def test_legacy_folder_with_new_skill_id_does_not_duplicate(self):
@@ -191,18 +191,19 @@ class DependencyBootstrapTests(unittest.TestCase):
         self.ensure(names=("gen-ui",))
         with patch.object(Path, "home", return_value=self.home), \
              patch.object(preflight, "ensure_dependencies", side_effect=AssertionError("duplicate clone")), \
-             patch.object(sys, "argv", ["preflight.py", "--project", str(self.home), "--json"]), \
+             patch.object(sys, "argv", ["preflight.py", "--project", str(self.home), "--host", "codex", "--json"]), \
              redirect_stdout(io.StringIO()) as capture:
             code = preflight.main()
         self.assertEqual(0, code)
-        self.assertEqual("READY_FILESYSTEM", json.loads(capture.getvalue())["preflight_status"])
+        self.assertEqual("READY_CORE_OPTIONAL_FILES_FOUND_AGENT_CONFIRMATION_REQUIRED", json.loads(capture.getvalue())["preflight_status"])
         self.assertFalse((self.root / "code-pact").exists())
 
     def test_preflight_has_read_only_flag_and_default_bootstrap(self):
         import preflight
         parser = (ROOT / "scripts" / "preflight.py").read_text(encoding="utf8")
         self.assertIn("--no-auto-install", parser)
-        self.assertIn("ensure_dependencies(names=missing)", parser)
+        self.assertIn("--install-optional", parser)
+        self.assertIn("--host", parser)
         self.assertEqual(("code-pact", "gen-ui"), preflight.REQUIRED)
 
 

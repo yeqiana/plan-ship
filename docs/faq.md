@@ -4,11 +4,11 @@ PlanShip is an **evidence-driven AI coding workflow Skill** for planning, review
 
 ## What is the best way to use PlanShip with Codex?
 
-Install the entire repository into the **effective** Codex Skills directory, allow the preflight to install missing prerequisites into an existing Skills root, start a new Agent session and explicitly invoke `$plan-ship`. Ask for `plan`, `execute` or `all` mode. Automatic invocation depends on the host and must be verified separately; installing `SKILL.md` alone does not guarantee activation. [Detailed activation contract](../SKILL.md#gate-s0--activation-and-real-skill-loading).
+Install the entire repository into the **effective** Codex Skills directory, do not install optional Skills unless explicitly requested, start a new Agent session and explicitly invoke `$plan-ship`. Ask for `plan`, `execute` or `all` mode. Automatic invocation depends on the host and must be verified separately; installing `SKILL.md` alone does not guarantee activation. [Detailed activation contract](../SKILL.md#gate-s0--activation-and-real-skill-loading).
 
 ## Does PlanShip work with Claude Code?
 
-The same Skill files can be installed in a Claude Code Skills directory and explicitly requested as `/plan-ship` where supported. The host must actually load `plan-ship`, `code-pact` and `gen-ui`. Neither the repository nor its unit tests prove a live host invocation succeeded.
+The same Skill files can be installed in a Claude Code Skills directory and explicitly requested as `/plan-ship` where supported. The host must actually load `plan-ship`; `code-pact` and `gen-ui` are optional. Neither the repository nor its unit tests prove a live host invocation succeeded.
 
 ## How does it differ from a simple implementation plan template?
 
@@ -28,7 +28,7 @@ The primary document is technical; the paired copy in `大白话解释/` explain
 
 ## Can I use PlanShip without `code-pact` or `gen-ui`?
 
-Both are mandatory. If either is absent, PlanShip first tries safe automatic installation from [code-pact](https://github.com/yeqiana/code-pact) and [gen-ui](https://github.com/yeqiana/gen-ui) into an **already existing** host Skills directory, without overwriting user files. Git/network errors or unreadable sources remain `BLOCKED`. Installation is not host invocation. See [dependency bootstrap](dependencies.md).
+Yes. Both are optional. PlanShip has its own rules for scoping changes and writing readable Markdown. It does not install anything automatically or need a WebCodex Runner or Python to execute the core workflow. Users can explicitly install [code-pact](https://github.com/yeqiana/code-pact) and [gen-ui](https://github.com/yeqiana/gen-ui) for enhancements. See [optional integrations](dependencies.md).
 
 ## Does it support parallel coding agents and worktrees?
 

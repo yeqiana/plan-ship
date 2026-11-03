@@ -19,7 +19,7 @@ Coding agents can skip review, modify unrelated features, declare `PASS` without
 | Area | Contract |
 | --- | --- |
 | Plan | Inspect actual project files and provided attachments; draft and improve the plan through at least two substantive review rounds |
-| Scope | Load `code-pact` first and prefer existing architecture and minimal changes |
+| Scope | Built-in minimal scope; optionally integrate `code-pact` |
 | Inputs | Scan optional `test-dir/` automatically; ask once only when essential inputs are missing |
 | Implement | Review missing test cases before changes; allow local worktrees and final integration retest |
 | Test | Require real framework tests, meaningful assertions, fresh evidence and source fingerprints; never fake success |
@@ -27,23 +27,19 @@ Coding agents can skip review, modify unrelated features, declare `PASS` without
 | Explain | Pair each formal Markdown deliverable with a nontechnical, diagram-supported explanation |
 | Archive | Stable, idempotent numbered documents under `.idea/docs/<plan-name>/` |
 
-## Requirements
+## Requirements and optional integrations
 
-- Python 3.11+ for included tools.
-- The separate `code-pact` and `gen-ui` Skills must be **installed and actually read** before PlanShip analyzes a project. Missing dependencies are automatically installed into an already existing Codex/Claude Skills root from the verified GitHub repositories below. Clone/network/permissions failures remain `BLOCKED`; installation alone never proves the host loaded the rules.
-- Project-specific pytest, Maven, or Gradle tooling is required if the project needs corresponding tests.
+**Core workflow: zero external runtime dependencies.** Install the PlanShip Skill folder into a supported Codex/Claude Skills directory (its bundled `references/` are part of the core instructions); PlanShip itself can run via the host's native project-reading, editing, documentation and test capabilities. **WebCodex Runner, Python, MCP, Git, `code-pact`, and `gen-ui` are not prerequisites.** Real business tests still require the applicable project test runtime (Maven, Gradle, pytest, etc.). If unavailable, report that test as `未验证`, not `PASS`.
 
-## Required dependencies and safe auto-install
+Optional enhancements (never downloaded automatically): [code-pact](https://github.com/yeqiana/code-pact) for review/minimal-change discipline, [gen-ui](https://github.com/yeqiana/gen-ui) for presentation. Python 3.11+ provides optional document publication/verification and evidence utilities. Without Python, use native host tools, verify paired files and numbering manually, and report that automated validation and atomic publication were not verified.
 
-PlanShip requires **[code-pact](https://github.com/yeqiana/code-pact)** for minimal-change discipline and **[gen-ui](https://github.com/yeqiana/gen-ui)** for accessible output. On first invocation, its preflight checks both and installs missing Skills from exactly these GitHub repositories into an **existing** Codex/Claude Skills directory. It never creates a missing host Skills root or overwrites a pre-existing Skill. A failed install blocks project analysis; a successful install must still be followed by actual Skill loading and agent confirmation.
+Only when the user **explicitly requests optional installation**, run:
 
 ```powershell
-python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --json
-# To diagnose without network writes:
-python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --no-auto-install --json
+python .\scripts\preflight.py --project "D:\workspace\my-project" --host codex --install-optional --read-content --json
 ```
 
-**Host selection:** Install to the existing directory that contains the active PlanShip installation whenever possible; otherwise use the first existing standard user-level Skills root. Never mistake Windows SYSTEM profile for your interactive home. See [dependency installation and recovery](docs/dependencies.md).
+By default preflight is read-only. See [optional integrations](docs/dependencies.md).
 
 ## Installation
 
@@ -87,7 +83,7 @@ Claude Code uses `/plan-ship` instead of `$plan-ship`. Natural-language auto-inv
 
 ```mermaid
 flowchart LR
-  A[Load Skills] --> B[Inspect project / inputs]
+  A[Load PlanShip] --> B[Inspect project / inputs]
   B --> C[Draft and review plan twice]
   C --> D[Check test coverage]
   D --> E[Implement smallest change]
@@ -114,10 +110,10 @@ Missing test fixtures are requested only if the actual requirement cannot be val
 
 An additional test-case addendum appears only if needed; stable numbering never renumbers existing files. The plain-language companion must explain the problem, before/after behavior, analogy, diagrams, validation steps, risks, status and terminology; automatic readability checks are a minimum gate, not proof that a human reader understands.
 
-## Local checks
+## Optional local checks (requires Python, not needed for core usage)
 
 ```powershell
-python .\scripts\preflight.py --project "D:\workspace\my-project" --read-content --no-auto-install --json
+python .\scripts\preflight.py --project "D:\workspace\my-project" --host codex --read-content --json  # optional read-only
 python .\scripts\test_input_probe.py --workspace "D:\workspace\my-project"
 python .\scripts\route_manager.py              # read-only route check
 python .\scripts\route_manager.py --install    # opt-in only: edits user-level host instructions
@@ -125,7 +121,7 @@ python .\scripts\route_manager.py --install    # opt-in only: edits user-level h
 
 For former installations, see the [migration guide](docs/migration.md). Never overwrite existing user instructions without consent.
 
-## Test and release checks
+## Maintainer test and release checks (requires Python)
 
 ```powershell
 python -m pip install pytest
@@ -133,14 +129,14 @@ python .\scripts\validate_package.py
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-GitHub Actions runs the same package and regression checks. **Passing this repository's tests is not a production acceptance certificate for a user's business system.** Host-level auto-invocation is separately covered by [manual evaluation](evals/manual-evaluation.md), and detailed gates are documented in [quality gates](docs/quality-gates.md).
+The optional Python checks above are for maintainers, not mandatory when using the Skill. GitHub Actions runs the package and regression checks. **Passing this repository's tests is not a production acceptance certificate for a user's business system.** Host-level auto-invocation is separately covered by [manual evaluation](evals/manual-evaluation.md), and detailed gates are documented in [quality gates](docs/quality-gates.md).
 
 ## Boundaries
 
 - Ordinary PlanShip execution permits local Git changes but prohibits remote pushes, branches, and PRs unless the user gives a separate explicit instruction to perform those external actions.
 - Printed `PASS`, empty tests, stale reports and unchecked business behavior never count as acceptance.
 - No invented screenshots, image assets or human verification results.
-- It adapts rendering to the actually loaded `gen-ui` Skill; CLI Markdown fallback is expected.
+- Plain Markdown is the built-in fallback; `gen-ui` is an optional presentation integration.
 
 ## Explore / source of truth
 
@@ -157,7 +153,7 @@ GitHub Actions runs the same package and regression checks. **Passing this repos
 
 ## Project layout
 
-`SKILL.md` defines behavior; `agents/openai.yaml` describes the Codex entry point; `references/` contains detailed contracts; `assets/templates/` contains writing templates; `scripts/` implements validation; `tests/` tests it; `docs/`, `examples/`, and `evals/` provide guidance and human evaluation.
+`SKILL.md` defines behavior; `agents/openai.yaml` describes the Codex entry point; `references/` contains detailed contracts; `assets/templates/` contains writing templates; `scripts/` contains optional validation helpers; `tests/` tests it; `docs/`, `examples/`, and `evals/` provide guidance and human evaluation.
 
 ## License
 

@@ -15,7 +15,7 @@
 | 能力 | 行为 |
 | --- | --- |
 | 方案编写 | 结合真实项目、需求、当前会话文件，产出初稿并进行至少两轮**真实评审与补强** |
-| 最小改动 | 加载 `code-pact` 后优先复用现有实现，保护旧功能 |
+| 最小改动 | 内置最小改动原则；可选结合 `code-pact`，保护旧功能 |
 | 自动探测 | 扫描项目 `test-dir/`，仅在关键测试文件缺失且必须获取时询问一次 |
 | 实施测试 | 评审合格后实施；缺测试用例先补充并评审两轮；合并后重新执行真实测试 |
 | 禁止虚假测试 | 拒绝 `echo PASS`、恒真断言、旧报告、未执行测试、伪造验收通过 |
@@ -23,28 +23,24 @@
 | 双副本 | 技术 MD 与非技术读者可理解的“大白话解释”同编号、同版本、成对更新 |
 | 幂等文档 | `.idea/docs/<方案名称>/` 中按逻辑身份稳定编号，避免重复生成与重排 |
 
-## 依赖仓库与首次自动安装
+## 核心零依赖 · 可选增强
 
-PlanShip 的两个必需依赖（注意它们不是 PlanShip 的旧名称）：
+**PlanShip 本身不依赖 WebCodex Runner、Python、MCP、Git，也不要求安装 `code-pact` / `gen-ui`。** 只要 Codex/Claude 等宿主能够加载 `SKILL.md`，就可以直接按本 Skill 执行两轮方案评审、最小实施、真正的业务测试和手动验收文档。业务测试仍必须使用项目自身需要的运行环境（Java/Maven/Gradle 等），没有条件的测试标记 `未验证`。
 
-- **[code-pact](https://github.com/yeqiana/code-pact)**：编码范围、最小改动与评审规范。
-- **[gen-ui](https://github.com/yeqiana/gen-ui)**：Markdown 解释与 UI 呈现规范。
+- [code-pact](https://github.com/yeqiana/code-pact)：可选的代码审查与最小改动规范。
+- [gen-ui](https://github.com/yeqiana/gen-ui)：可选的结果与 Markdown 展示规范。
+- Python 3.11+：仅运行自带文档事务发布、证据与辅助测试校验工具时需要；不安装不会阻断 PlanShip 的核心流程。此时必须如实标注“自动门禁未执行”，不能声称双副本写入具有事务原子性。
 
-PlanShip 在项目分析前运行 `preflight.py`，会自动检测并从上述**固定 GitHub 地址**安装缺失依赖。**仅使用本机已经存在的 Codex / Claude Skills 根目录**，不创建新的 Agent 目录，不覆盖现有 Skill，不删除旧版，遇到重名冲突/网络异常就停止。安装后还必须实际读取两份 `SKILL.md`；仅 clone 成功不算加载成功。
+**默认不联网、不执行安装脚本、不自动安装依赖。** 如用户明确提出安装可选 Skill，可以使用已有 Agent Skills 目录并指定当前宿主：
 
 ```powershell
-python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --json
-# 只检查，不自动安装：
-python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --no-auto-install --json
+# 可选的只读诊断
+python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --host codex --read-content --json
+# 仅用户明确批准后执行（需要 Python 和 Git）
+python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --host codex --install-optional --json
 ```
 
-如果 PlanShip 不在 `.agents/skills`，请把上方脚本路径替换成实际安装位置。自动安装细节参阅 [依赖规范](docs/dependencies.md)。
-
-## 安装前准备
-
-- Python 3.11+：运行自带脚本和测试；本地安装无需额外后台服务。
-- **必须存在并能实际读取** `code-pact` 和 `gen-ui` 两个依赖 Skill。缺失时将从下述已核实的 GitHub 仓库自动安装到**已存在**的 Codex / Claude Skills 目录；安装失败仍 `BLOCKED`，且安装不代表 Agent 已加载。
-- 如果需要自动化测试证据，项目自身还需安装对应测试运行环境（如 `pytest` / Maven / Gradle）。
+安装 PlanShip Skill 文件夹（至少包含 `SKILL.md` 与随附的 `references/` 规范）即可启动核心流程；`scripts/` 是可选的高级校验工具。参阅 [可选集成和安装安全说明](docs/dependencies.md)。
 
 ### Windows · Codex（推荐）
 
@@ -68,7 +64,7 @@ Test-Path "$HOME\.claude\skills\plan-ship\SKILL.md"
 
 ```text
 $plan-ship 方案编写：为当前项目增加 IM 冷热库拆分能力。
-只改本需求相关部分，先加载协作 Skill，再评审两轮，保存到 .idea/docs/。
+只改本需求相关部分，按内置最小改动规则评审两轮，保存到 .idea/docs/。
 ```
 
 **方案实施测试验收：** 读取已经通过门禁的最终方案，检查缺失用例和测试材料，实施、合并、真实测试，最后交付手动复验方案。
@@ -78,7 +74,7 @@ $plan-ship 方案实施测试验收：按 .idea/docs/IM冷热库拆分 的正式
 只允许本地 Git 变更；任何未运行的测试都必须标记“未验证”。
 ```
 
-**全流程：** 在前置依赖、文件与权限允许时连续执行两个模式。
+**全流程：** 在可用的项目文件与工具权限下连续执行两个模式，不需要其他 Skill。
 
 ```text
 $plan-ship 全流程：为当前 Java 项目新增一次性验证码校验。
@@ -91,7 +87,7 @@ Claude Code 可把 `$plan-ship` 换为 `/plan-ship`。自然语言触发属于�
 
 ```mermaid
 flowchart TD
-    A[确认主 Skill 与两项依赖已加载] --> B[检查项目、附件和 test-dir]
+    A[确认 PlanShip 已加载] --> B[检查项目、附件和 test-dir]
     B --> C{关键输入缺失?}
     C -- 是 --> D[仅询问必要内容/标记阻断]
     C -- 否 --> E[方案初稿与两轮评审补强]
@@ -129,11 +125,11 @@ flowchart TD
 
 详见 [大白话规范](references/plain-language.md) 与 [示例](examples/quickstart.md)。
 
-## 本地检查
+## 可选本地脚本检查（需要 Python）
 
 ```powershell
 # 依赖探测只读，不代表 Agent 已加载
-python .\scripts\preflight.py --project "D:\workspace\your-project" --read-content --no-auto-install --json
+python .\scripts\preflight.py --project "D:\workspace\your-project" --host codex --read-content --json
 
 # 测试素材探测，无必需文件时不询问
 python .\scripts\test_input_probe.py --workspace "D:\workspace\your-project"

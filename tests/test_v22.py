@@ -15,7 +15,7 @@ from preflight import check
 
 
 def tech(title='新方案'):
-    return f'''# {title}\n\n## 概述\n\n根据实际需求修改对应模块，只添加一个接口，保留旧功能兼容行为；用例先验证输入和错误状态，再执行回归测试。\n\n## 检验\n\n每个新需求用真实测试用例关联一个断言，记录实际运行的日志和系统输出；未执行的步骤不可声称已经完成。\n'''
+    return f'''# {title}\n\n## 概述\n\n核心业务概念：新需求\n\n根据实际需求修改对应模块，只添加一个接口，保留旧功能兼容行为；用例先验证输入和错误状态，再执行回归测试。\n\n## 检验\n\n每个新需求用真实测试用例关联一个断言，记录实际运行的日志和系统输出；未执行的步骤不可声称已经完成。\n'''
 
 
 def plain(title='新方案'):
@@ -200,8 +200,8 @@ class PreflightTests(unittest.TestCase):
 
     def test_missing_skills_blocks(self):
         with patch('discover_skills.roots', return_value=[('codex-user-modern', self.home / '.agents' / 'skills')]):
-            result = check(self.ws)
-        self.assertEqual('BLOCKED_FILESYSTEM', result['preflight_status'])
+            result = check(self.ws, host='codex')
+        self.assertEqual('READY_CORE_WITH_OPTIONAL_WARNINGS', result['preflight_status'])
 
     def test_two_skills_found_ready_for_loading(self):
         root = self.home / '.agents' / 'skills'
@@ -210,8 +210,8 @@ class PreflightTests(unittest.TestCase):
             directory.mkdir(parents=True)
             (directory / 'SKILL.md').write_text('---\nname: ' + name + '\ndescription: Test\n---\n\n# Skill\n', encoding='utf-8')
         with patch('discover_skills.roots', return_value=[('codex-user-modern', root)]):
-            result = check(self.ws)
-        self.assertEqual('READY_FILESYSTEM', result['preflight_status'])
+            result = check(self.ws, host='codex')
+        self.assertEqual('READY_CORE_OPTIONAL_FILES_FOUND_AGENT_CONFIRMATION_REQUIRED', result['preflight_status'])
         self.assertTrue(all(result['skills'][x]['found'] for x in ('code-pact', 'gen-ui')))
 
     def test_bad_frontmatter_fails_closed(self):
@@ -219,7 +219,7 @@ class PreflightTests(unittest.TestCase):
         root.mkdir(parents=True)
         (root / 'SKILL.md').write_text('# 不是合法 Skill Frontmatter\n', encoding='utf-8')
         with patch('discover_skills.roots', return_value=[('claude-user', root.parent)]):
-            self.assertEqual('BLOCKED_FILESYSTEM', check(self.ws)['preflight_status'])
+            self.assertEqual('READY_CORE_WITH_OPTIONAL_WARNINGS', check(self.ws, host='claude')['preflight_status'])
 
 
 if __name__ == '__main__':

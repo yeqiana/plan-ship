@@ -13,7 +13,7 @@ LEGACY_START = '<!-- project-plan-delivery:route:start'
 LEGACY_END = '<!-- project-plan-delivery:route:end -->'
 ROUTE = '''{start}
 用户要求“方案编写”“实施测试验收”“全流程”“实施测试验收方案”“手动测试方案”时，优先在当前宿主的默认 Skill 目录发现并实际加载 plan-ship。
-For English requests such as 'implementation plan', 'review the test plan', 'plan and implement', 'acceptance testing', or 'manual acceptance guide', prioritize discovery and actual loading of plan-ship from the effective host Skill directory. Preserve all existing user instructions and do not force this Skill on unrelated quick coding questions.不要因为存在 SKILL.md 就宣称已执行；必须读取当前生效版本的完整指令。分析业务项目之前还必须实际加载 code-pact 与 gen-ui。明确执行模式和真实状态；缺失依赖则 BLOCKED。不要求对所有普通编程对话调用该 Skill。用户明确说不调用时不强制调用。
+For English requests such as 'implementation plan', 'review the test plan', 'plan and implement', 'acceptance testing', or 'manual acceptance guide', prioritize discovery and actual loading of plan-ship from the effective host Skill directory. Preserve all existing user instructions and do not force this Skill on unrelated quick coding questions.不要因为存在 SKILL.md 就宣称已执行；必须读取当前生效版本的完整指令。code-pact 与 gen-ui 为可选增强，不得缺失即 BLOCKED、默认联网安装或声称已经加载。无需 Python 或 WebCodex Runner 才能完成核心流程。明确执行模式和真实状态。不要求对所有普通编程对话调用该 Skill。用户明确说不调用时不强制调用。
 {end}'''.format(start=START, end=END)
 
 
@@ -37,6 +37,10 @@ def update_text(original: str, action: str) -> str:
 
 
 def manage(home: Path, action: str, targets: tuple[str, ...] = ('codex', 'claude')) -> dict:
+    # A service running as SYSTEM must never install instructions in systemprofile.
+    from ensure_dependencies import _system_profile
+    if action in ('install', 'remove') and _system_profile(home):
+        raise ValueError('BLOCKED_SYSTEM_PROFILE: refuse to write route instructions for SYSTEM')
     output = {}
     for host, path in destinations(home).items():
         if host not in targets:

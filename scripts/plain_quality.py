@@ -16,12 +16,33 @@ REQUIRED={
     '风险与状态': ('风险与状态','失败怎么办','风险和当前状态'),
     '术语': ('术语小词典','术语解释','专业名词解释'),
 }
+BUSINESS_ANCHORS = re.compile(r'(?m)^\s*(?:[-*]\s*)?(?:核心业务概念|Business concepts)\s*[：:]\s*(.+?)\s*$')
 STATUSES=('BLOCKED','未执行','未通过','未验证')
 PLACEHOLDER=re.compile(r'\{\{[^\n{}]+\}\}|\b(?:TODO|TBD)\b',re.I)
 
 
+def business_concepts(technical: str) -> list[str]:
+    """Require explicit project-specific anchors; deterministic check, not semantic AI judgment."""
+    matches = BUSINESS_ANCHORS.findall(technical)
+    if not matches:
+        return []
+    terms = [x.strip().strip('`* ') for x in re.split(r'[,，、;；|]', matches[0])]
+    return [x for x in terms if 2 <= len(x) <= 60 and not '{{' in x][:12]
+
+
 def evaluate(technical:str,plain:str)->list[str]:
     errors=[]
+    concepts=business_concepts(technical)
+    if not concepts:
+        errors.append('大白话业务相关性 REVIEW_REQUIRED：技术版缺少“核心业务概念：...”明确锚点，不能以模板结构冒充业务解释通过')
+    else:
+        main_content = re.split(r'(?m)^##\s+(?:术语|专业名词)', plain, maxsplit=1)[0]
+        missing=[x for x in concepts if x not in main_content]
+        if missing:
+            errors.append('大白话业务相关性不通过，正文缺少核心业务概念：'+', '.join(missing))
+        before_after = re.search(r'(?ms)^##\s+[^\n]*(?:改动前后|改造前后|之前和之后)[^\n]*\n(.*?)(?=^##\s+|\Z)', plain)
+        if before_after and concepts[0] not in before_after.group(1):
+            errors.append('大白话改动前后缺少首个业务概念：'+concepts[0])
     if PLACEHOLDER.search(plain): errors.append('大白话文档含未替换的模板占位符')
     if technical.strip()==plain.strip(): errors.append('大白话文档不得直接复制技术版')
     if len(plain.strip())<360: errors.append('大白话解释缺少足够具体的业务示例与步骤')
@@ -53,7 +74,7 @@ def main()->int:
         errors=evaluate(args.technical.read_text(encoding='utf-8'),args.plain.read_text(encoding='utf-8'))
     except (OSError,UnicodeError) as exc:
         errors=[str(exc)]
-    print(json.dumps({'status':'PASS' if not errors else 'BLOCKED','errors':errors,'note':'结构检查不等于真实非技术读者已看懂，仍需逐段人工式复核'},ensure_ascii=False,indent=2))
+    print(json.dumps({'status':'PASS' if not errors else 'BLOCKED','errors':errors,'note':'结构与显式业务概念的文字覆盖检查，不等于真实读者理解或语义准确；仍需人工复核'},ensure_ascii=False,indent=2))
     return 2 if errors else 0
 
 if __name__=='__main__':

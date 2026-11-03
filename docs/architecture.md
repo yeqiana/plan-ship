@@ -1,12 +1,10 @@
 # PlanShip workflow architecture
 
-PlanShip is a portable Skill package: Markdown instructions plus local Python verification utilities. There is **no server, database, scheduler or model API** bundled with the Skill.
+PlanShip is a portable, standalone Markdown Skill. Python verification utilities are optional extras, not runtime dependencies. There is **no server, database, scheduler or model API** bundled with the Skill.
 
 ```mermaid
 flowchart TD
-    A[Codex or Claude invokes PlanShip] --> S{Actual dependency Skills loaded?}
-    S -- No --> X[BLOCKED: disclose missing inputs]
-    S -- Yes --> I[Inspect real project and optional test-dir]
+    A[Codex or Claude invokes PlanShip] --> I[Inspect real project and optional test-dir]
     I --> P[Draft v0 plan]
     P --> R[Review and revise at least twice]
     R --> G{Plan-only request?}
@@ -21,7 +19,7 @@ flowchart TD
     V -- Yes --> M[Manual acceptance guide + reader MD]
 ```
 
-**How to read the diagram:** each arrow is a required transition, not a claim that it happened in any particular session. If dependencies, relevant test cases or reliable evidence are missing, the corresponding gate remains blocked. A plan-only request never modifies business code.
+**How to read the diagram:** each arrow is a required transition, not a claim that it happened in any particular session. If essential project inputs, tests or reliable evidence are missing, that requirement remains blocked; missing optional Skills never block the core workflow. A plan-only request never modifies business code.
 
 ## What the files do
 
@@ -36,4 +34,4 @@ flowchart TD
 
 ## Data and trust boundaries
 
-The user task and project files remain local to the Agent's authorized runtime. Test artifacts are stored in `<project>/.idea/docs/<plan-name>/evidence/`. The Skill cannot prevent subprocess network access or malicious local file tampering; controlled Runner/CI policy and independent review remain necessary. Do not publish user-private project evidence to the public PlanShip repository.
+The user task and project files remain local to the Agent's authorized runtime. Test artifacts are stored in `<project>/.idea/docs/<plan-name>/evidence/`. The Skill cannot prevent subprocess network access or malicious local file tampering; host/CI permission controls and independent review remain necessary for strong isolation; WebCodex is not required. Do not publish user-private project evidence to the public PlanShip repository.

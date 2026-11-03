@@ -144,12 +144,12 @@ class ContentAndBusinessTests(unittest.TestCase):
                 (base / 'SKILL.md').write_text('---\nname: ' + name + '\ndescription: test\n---\n# rules\n参见 references/usage.md', encoding='utf8')
                 (base / 'references' / 'usage.md').write_text('# 真实规则内容', encoding='utf8')
             with patch('discover_skills.roots', return_value=[('codex-user', root)]):
-                ready = check(Path(temp), load=True)
-                self.assertEqual('READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED', ready['preflight_status'])
+                ready = check(Path(temp), load=True, host='codex')
+                self.assertEqual('READY_CORE_OPTIONAL_FILES_READ_AGENT_CONFIRMATION_REQUIRED', ready['preflight_status'])
                 self.assertEqual(2, len(ready['skills']['gen-ui']['content_read']['files']))
                 (root / 'gen-ui' / 'references' / 'usage.md').unlink()
-                failed = check(Path(temp), load=True)
-                self.assertEqual('BLOCKED_CONTENT_READ', failed['preflight_status'])
+                failed = check(Path(temp), load=True, host='codex')
+                self.assertEqual('READY_CORE_WITH_OPTIONAL_WARNINGS', failed['preflight_status'])
 
     def test_java_empty_assert_not_accepted_as_business_test(self):
         from test_report import _java_source_has_assertion
