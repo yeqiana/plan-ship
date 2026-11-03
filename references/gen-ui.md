@@ -1,14 +1,14 @@
-> **Intelligent UI compatibility / English overview.** Load the actual installed intelligent-ui Skill and apply its effective host rules. Terminal-only hosts should get complete, copyable Markdown; never invent rendered controls, charts or screenshots. Layout should never conceal real tests, failures or blockers.
+> **Gen UI compatibility / English overview.** Load the actual installed gen-ui Skill and apply its effective host rules. Terminal-only hosts should get complete, copyable Markdown; never invent rendered controls, charts or screenshots. Layout should never conceal real tests, failures or blockers.
 
-# Intelligent UI 适配（强依赖）
+# Gen UI 适配（强依赖）
 
 ## 必须先发现
 
-严格执行 `SKILL.md` P0，先查找、加载并遵守 `ai-coding-collaboration`，**之后才能分析项目**。同时加载当前宿主生效的 `intelligent-ui/SKILL.md`。两者都是用户要求的硬依赖。不能拿记忆中的摘要冒充加载。
+严格执行 `SKILL.md` P0，先查找、加载并遵守 `code-pact`，**之后才能分析项目**。同时加载当前宿主生效的 `gen-ui/SKILL.md`。两者都是用户要求的硬依赖。不能拿记忆中的摘要冒充加载。
 
 若实际 Skill 定义和下述摘要有差异，以实际找到的当前宿主有效版本为准。任一缺失时 BLOCKED，不得伪称严格执行，也不能自动使用记忆中的旧版内容替代。
 
-## 已知的 intelligent-ui v1 兼容要点
+## 已知的 gen-ui v1 兼容要点
 
 - **有兼容 UI renderer/工具时**：按真实 `references/ui-protocol.md` 生成组件树；如果该协议要求 `schema_version`, `mode`, `summary`, `fallback_markdown`, `ui`，严格填写和校验。
 - **只有终端/普通 Markdown 时**：输出清晰、完整、可自包含的 Markdown，不裸露 JSON 组件树，不虚构按钮、状态或已经渲染的图表。

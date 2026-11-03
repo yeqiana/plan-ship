@@ -4,7 +4,7 @@
 
 | 门禁 | 必须完成的事实 | 未完成时 |
 |---|---|---|
-| S · Skills | 发现并实际读取主 Skill、`ai-coding-collaboration`、`intelligent-ui`；报告真实路径与生效版本 | `BLOCKED`，不能直接分析业务工程 |
+| S · Skills | 缺失时从固定 GitHub 来源安全安装到已有 Agent Skills 目录；随后实际读取主 Skill、`code-pact`、`gen-ui` 并报告版本 | `BLOCKED`，不能直接分析业务工程 |
 | I · Inputs | 分析真实项目、附件与 `test-dir/`；仅在关键文件必需且缺失时提出一次明确询问 | 不得声称依赖该文件的测试通过 |
 | P · Plan | 初稿、两轮有差异的评审补强、需求-测试-验收追踪、最小改动范围 | 不得实施 |
 | T · Test design | 缺少用例时补齐并至少两轮评审，不需要时不产生冗余文档 | 不得针对缺口实施 |

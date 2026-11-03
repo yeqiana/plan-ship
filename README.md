@@ -19,7 +19,7 @@ Coding agents can skip review, modify unrelated features, declare `PASS` without
 | Area | Contract |
 | --- | --- |
 | Plan | Inspect actual project files and provided attachments; draft and improve the plan through at least two substantive review rounds |
-| Scope | Load `ai-coding-collaboration` first and prefer existing architecture and minimal changes |
+| Scope | Load `code-pact` first and prefer existing architecture and minimal changes |
 | Inputs | Scan optional `test-dir/` automatically; ask once only when essential inputs are missing |
 | Implement | Review missing test cases before changes; allow local worktrees and final integration retest |
 | Test | Require real framework tests, meaningful assertions, fresh evidence and source fingerprints; never fake success |
@@ -30,8 +30,20 @@ Coding agents can skip review, modify unrelated features, declare `PASS` without
 ## Requirements
 
 - Python 3.11+ for included tools.
-- The separate `ai-coding-collaboration` and `intelligent-ui` Skills must be **installed and actually read** before PlanShip analyzes a project. Missing dependencies produce `BLOCKED`, not silent downgrade.
+- The separate `code-pact` and `gen-ui` Skills must be **installed and actually read** before PlanShip analyzes a project. Missing dependencies are automatically installed into an already existing Codex/Claude Skills root from the verified GitHub repositories below. Clone/network/permissions failures remain `BLOCKED`; installation alone never proves the host loaded the rules.
 - Project-specific pytest, Maven, or Gradle tooling is required if the project needs corresponding tests.
+
+## Required dependencies and safe auto-install
+
+PlanShip requires **[code-pact](https://github.com/yeqiana/code-pact)** for minimal-change discipline and **[gen-ui](https://github.com/yeqiana/gen-ui)** for accessible output. On first invocation, its preflight checks both and installs missing Skills from exactly these GitHub repositories into an **existing** Codex/Claude Skills directory. It never creates a missing host Skills root or overwrites a pre-existing Skill. A failed install blocks project analysis; a successful install must still be followed by actual Skill loading and agent confirmation.
+
+```powershell
+python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --json
+# To diagnose without network writes:
+python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --no-auto-install --json
+```
+
+**Host selection:** Install to the existing directory that contains the active PlanShip installation whenever possible; otherwise use the first existing standard user-level Skills root. Never mistake Windows SYSTEM profile for your interactive home. See [dependency installation and recovery](docs/dependencies.md).
 
 ## Installation
 
@@ -105,7 +117,7 @@ An additional test-case addendum appears only if needed; stable numbering never 
 ## Local checks
 
 ```powershell
-python .\scripts\preflight.py --project "D:\workspace\my-project" --read-content --json
+python .\scripts\preflight.py --project "D:\workspace\my-project" --read-content --no-auto-install --json
 python .\scripts\test_input_probe.py --workspace "D:\workspace\my-project"
 python .\scripts\route_manager.py              # read-only route check
 python .\scripts\route_manager.py --install    # opt-in only: edits user-level host instructions
@@ -128,7 +140,7 @@ GitHub Actions runs the same package and regression checks. **Passing this repos
 - Ordinary PlanShip execution permits local Git changes but prohibits remote pushes, branches, and PRs unless the user gives a separate explicit instruction to perform those external actions.
 - Printed `PASS`, empty tests, stale reports and unchecked business behavior never count as acceptance.
 - No invented screenshots, image assets or human verification results.
-- It adapts rendering to the actually loaded `intelligent-ui` Skill; CLI Markdown fallback is expected.
+- It adapts rendering to the actually loaded `gen-ui` Skill; CLI Markdown fallback is expected.
 
 ## Explore / source of truth
 

@@ -95,7 +95,7 @@ def discover(project: Path, name: str | None):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", type=Path, default=Path.cwd(), help="Project/workspace directory")
-    parser.add_argument("--name", help="Optional skill name, e.g. intelligent-ui")
+    parser.add_argument("--name", help="Optional skill name, e.g. gen-ui")
     parser.add_argument("--json", action="store_true", help="Machine-readable discovery report")
     args = parser.parse_args()
     if args.name and ("/" in args.name or "\\" in args.name or args.name in (".", "..")):

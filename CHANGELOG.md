@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-11-03
+
+- Replace former required Skill identifiers with `code-pact` and `gen-ui` in all active contracts and tests.
+- Pin dependency installation sources to their verified GitHub repositories; automatically bootstrap missing Skills into an existing host Skills root without overwriting user files.
+- Keep the new bootstrap strictly separate from actual host Skill loading and evidence-backed acceptance.
+- Add offline adversarial tests for non-existent directories, failed clones, conflicts, and idempotency.
+
+
 ## 1.1.0 — 2026-11-03
 
 - English-first authoritative `SKILL.md`, bilingual activation keywords and Codex discovery description; preserved the Chinese workflow modes, folder identifiers and safety gates.

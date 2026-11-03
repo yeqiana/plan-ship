@@ -205,17 +205,17 @@ class PreflightTests(unittest.TestCase):
 
     def test_two_skills_found_ready_for_loading(self):
         root = self.home / '.agents' / 'skills'
-        for name in ('ai-coding-collaboration', 'intelligent-ui'):
+        for name in ('code-pact', 'gen-ui'):
             directory = root / name
             directory.mkdir(parents=True)
             (directory / 'SKILL.md').write_text('---\nname: ' + name + '\ndescription: Test\n---\n\n# Skill\n', encoding='utf-8')
         with patch('discover_skills.roots', return_value=[('codex-user-modern', root)]):
             result = check(self.ws)
         self.assertEqual('READY_FILESYSTEM', result['preflight_status'])
-        self.assertTrue(all(result['skills'][x]['found'] for x in ('ai-coding-collaboration', 'intelligent-ui')))
+        self.assertTrue(all(result['skills'][x]['found'] for x in ('code-pact', 'gen-ui')))
 
     def test_bad_frontmatter_fails_closed(self):
-        root = self.home / '.claude' / 'skills' / 'ai-coding-collaboration'
+        root = self.home / '.claude' / 'skills' / 'code-pact'
         root.mkdir(parents=True)
         (root / 'SKILL.md').write_text('# 不是合法 Skill Frontmatter\n', encoding='utf-8')
         with patch('discover_skills.roots', return_value=[('claude-user', root.parent)]):

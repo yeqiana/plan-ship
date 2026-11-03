@@ -4,7 +4,7 @@
 
 ## 测试前准备
 
-- 在相应宿主的默认 Skills 目录安装 `plan-ship`、`ai-coding-collaboration`、`intelligent-ui`。
+- 在相应宿主的默认 Skills 目录安装 `plan-ship`、`code-pact`、`gen-ui`。
 - 新开会话，在隔离的小型测试仓库执行，不要使用生产数据或真实推送权限。
 - 记录每次实际加载的 `SKILL.md` 路径和版本、使用的模型/宿主、完整命令及真实观察结果。
 

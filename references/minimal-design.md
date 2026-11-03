@@ -1,8 +1,8 @@
-> **Minimal change / English overview.** Actually apply ai-coding-collaboration before project analysis. Choose reuse of existing code and dependencies over speculative abstractions. Record affected and unchanged modules, regression tests, rejected extra components and a rollback plan. Never avoid necessary real tests to make the change look small.
+> **Minimal change / English overview.** Actually apply code-pact before project analysis. Choose reuse of existing code and dependencies over speculative abstractions. Record affected and unchanged modules, regression tests, rejected extra components and a rollback plan. Never avoid necessary real tests to make the change look small.
 
-# 避免过度设计：ai-coding-collaboration 的后置补充约束
+# 避免过度设计：code-pact 的后置补充约束
 
-**前置要求：先实际加载并执行 `ai-coding-collaboration`，再开始分析项目。** 本文不是那个 Skill 的替代实现，也不推断其未看到的规则。如果两者冲突，应遵循用户当前明确目标并报告冲突；不静默忽略任何必须满足的约束。
+**前置要求：先实际加载并执行 `code-pact`，再开始分析项目。** 本文不是那个 Skill 的替代实现，也不推断其未看到的规则。如果两者冲突，应遵循用户当前明确目标并报告冲突；不静默忽略任何必须满足的约束。
 
 ## 分析时必须回答的六个问题
 

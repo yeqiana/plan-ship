@@ -6,7 +6,7 @@
 
 - Use English for public discovery metadata, English user requests and the primary explanation of technical contracts.
 - Explicitly retain Chinese terms used as activation keywords (`方案编写`, `方案实施测试验收`, `全流程`, `两轮评审`, `手动验收方案`) and identifiers required by existing real projects (`大白话解释/`).
-- Do not translate machine flags (`--workspace`), JSON keys, Skill IDs (`plan-ship`, `ai-coding-collaboration`, `intelligent-ui`), evidence states (`PASS`, `BLOCKED`), stable document numbers, or repository links.
+- Do not translate machine flags (`--workspace`), JSON keys, Skill IDs (`plan-ship`, `code-pact`, `gen-ui`), evidence states (`PASS`, `BLOCKED`), stable document numbers, or repository links.
 - A plain-language companion follows the user's language, even when its storage directory remains `大白话解释/`. Do not pass off a machine-generated explanation as validated by a real nontechnical user.
 - **Current limitation:** `scripts/validate_docs.py` still requires Chinese structural headings, review fields and terminal status keys. English narrative and titles can coexist with those labels, but a fully English formal MD structure is not supported by this release. Do not translate validated labels silently.
 - The source reference files may contain Chinese implementation details. Any translation of normative constraints must preserve semantics. Where translation is incomplete, state that transparently instead of claiming full internationalization.

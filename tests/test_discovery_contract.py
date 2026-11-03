@@ -19,8 +19,10 @@ class DiscoveryContractTests(unittest.TestCase):
         frontmatter = skill.split("---", 2)[1]
         for phrase in ("implementation", "review", "testing", "acceptance", "方案编写", "全流程"):
             self.assertIn(phrase, frontmatter)
-        self.assertIn("ai-coding-collaboration", skill)
-        self.assertIn("intelligent-ui", skill)
+        self.assertIn("code-pact", skill)
+        self.assertIn("gen-ui", skill)
+        self.assertIn("github.com/yeqiana/code-pact", skill)
+        self.assertIn("github.com/yeqiana/gen-ui", skill)
         self.assertIn("BLOCKED", skill)
         self.assertIn("大白话解释/", skill)
 

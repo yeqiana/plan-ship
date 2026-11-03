@@ -20,5 +20,5 @@ Skill 的自动触发由宿主控制。继续保留两个有效名称，会造�
 - `[ ]` 生效目录中的 `SKILL.md` 第一段是 `name: plan-ship`。
 - `[ ]` `agents/openai.yaml` 中使用 `$plan-ship`。
 - `[ ]` 用户常驻路由中不再存在旧版的触发片段。
-- `[ ]` `ai-coding-collaboration` / `intelligent-ui` 已找到并实际读取。
+- `[ ]` `code-pact` / `gen-ui` 已找到并实际读取。
 - `[ ]` 测试没有被跳过，实际验收状态真实。

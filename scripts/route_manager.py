@@ -13,7 +13,7 @@ LEGACY_START = '<!-- project-plan-delivery:route:start'
 LEGACY_END = '<!-- project-plan-delivery:route:end -->'
 ROUTE = '''{start}
 用户要求“方案编写”“实施测试验收”“全流程”“实施测试验收方案”“手动测试方案”时，优先在当前宿主的默认 Skill 目录发现并实际加载 plan-ship。
-For English requests such as 'implementation plan', 'review the test plan', 'plan and implement', 'acceptance testing', or 'manual acceptance guide', prioritize discovery and actual loading of plan-ship from the effective host Skill directory. Preserve all existing user instructions and do not force this Skill on unrelated quick coding questions.不要因为存在 SKILL.md 就宣称已执行；必须读取当前生效版本的完整指令。分析业务项目之前还必须实际加载 ai-coding-collaboration 与 intelligent-ui。明确执行模式和真实状态；缺失依赖则 BLOCKED。不要求对所有普通编程对话调用该 Skill。用户明确说不调用时不强制调用。
+For English requests such as 'implementation plan', 'review the test plan', 'plan and implement', 'acceptance testing', or 'manual acceptance guide', prioritize discovery and actual loading of plan-ship from the effective host Skill directory. Preserve all existing user instructions and do not force this Skill on unrelated quick coding questions.不要因为存在 SKILL.md 就宣称已执行；必须读取当前生效版本的完整指令。分析业务项目之前还必须实际加载 code-pact 与 gen-ui。明确执行模式和真实状态；缺失依赖则 BLOCKED。不要求对所有普通编程对话调用该 Skill。用户明确说不调用时不强制调用。
 {end}'''.format(start=START, end=END)
 
 

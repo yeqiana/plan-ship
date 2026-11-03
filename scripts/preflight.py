@@ -10,8 +10,9 @@ import sys
 from pathlib import Path
 
 from discover_skills import discover
+from ensure_dependencies import ensure_dependencies, existing_skill_roots, current_host_skill_root
 
-REQUIRED = ('ai-coding-collaboration', 'intelligent-ui')
+REQUIRED = ('code-pact', 'gen-ui')
 
 
 def read_skill_bundle(candidate: dict) -> dict:
@@ -44,6 +45,13 @@ def check(project: Path, load: bool = False) -> dict:
     for name in REQUIRED:
         found = discover(project, name)
         choices = [entry for entry in found['matches'] if entry.get('skill_name') == name]
+        # Prefer the host root containing the currently executing PlanShip installation.
+        effective = current_host_skill_root(existing_skill_roots())
+        if effective is not None:
+            host_choices = [candidate for candidate in choices if
+                            Path(candidate['path']).parent.parent.resolve() == effective.resolve()]
+            if host_choices:
+                choices = host_choices
         # Distinct candidates may be different versions: caller must resolve via host.
         loaded = read_skill_bundle(choices[0]) if load and len(choices) == 1 else None
         results[name] = {'found': bool(choices), 'candidates': choices, 'content_read': loaded,
@@ -73,9 +81,22 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--project', type=Path, required=True)
     p.add_argument('--json', action='store_true')
-    p.add_argument('--read-content', action='store_true', help='只读读取两个 Skill 的完整主文件与显式引用并核验哈希')
+    p.add_argument('--read-content', action='store_true', help='读取两个 Skill 的完整主文件与显式引用并核验哈希')
+    p.add_argument('--no-auto-install', action='store_true', help='仅诊断，不从官方 GitHub 仓库自动安装缺失依赖')
     args = p.parse_args()
+    bootstrap = None
+    if not args.no_auto_install:
+        # Only bootstrap when missing: a read-only check of existing installations has no side effects.
+        missing = tuple(name for name in REQUIRED if not any(
+            x.get('skill_name') == name
+            for x in discover(args.project, name)['matches']))
+        if missing:
+            bootstrap = ensure_dependencies(names=missing)
     result = check(args.project, load=args.read_content)
+    if bootstrap is not None:
+        result['bootstrap'] = bootstrap
+        if bootstrap['status'].startswith('BLOCKED'):
+            result['preflight_status'] = 'BLOCKED_AUTO_INSTALL'
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -84,6 +105,10 @@ def main() -> int:
             print(f"{'FOUND' if item['found'] else 'MISSING'} {name}")
             for candidate in item['candidates']:
                 print(' ', candidate['path'])
+        if bootstrap is not None:
+            print('AUTO_INSTALL:', bootstrap['status'])
+            for name, item in bootstrap.get('skills', {}).items():
+                print(' ', name, item['status'], item.get('repository'))
         print(result['note'])
     return 0 if result['preflight_status'] in ('READY_FILESYSTEM', 'READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED') else 2
 

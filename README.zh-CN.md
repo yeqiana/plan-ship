@@ -15,7 +15,7 @@
 | 能力 | 行为 |
 | --- | --- |
 | 方案编写 | 结合真实项目、需求、当前会话文件，产出初稿并进行至少两轮**真实评审与补强** |
-| 最小改动 | 加载 `ai-coding-collaboration` 后优先复用现有实现，保护旧功能 |
+| 最小改动 | 加载 `code-pact` 后优先复用现有实现，保护旧功能 |
 | 自动探测 | 扫描项目 `test-dir/`，仅在关键测试文件缺失且必须获取时询问一次 |
 | 实施测试 | 评审合格后实施；缺测试用例先补充并评审两轮；合并后重新执行真实测试 |
 | 禁止虚假测试 | 拒绝 `echo PASS`、恒真断言、旧报告、未执行测试、伪造验收通过 |
@@ -23,10 +23,27 @@
 | 双副本 | 技术 MD 与非技术读者可理解的“大白话解释”同编号、同版本、成对更新 |
 | 幂等文档 | `.idea/docs/<方案名称>/` 中按逻辑身份稳定编号，避免重复生成与重排 |
 
+## 依赖仓库与首次自动安装
+
+PlanShip 的两个必需依赖（注意它们不是 PlanShip 的旧名称）：
+
+- **[code-pact](https://github.com/yeqiana/code-pact)**：编码范围、最小改动与评审规范。
+- **[gen-ui](https://github.com/yeqiana/gen-ui)**：Markdown 解释与 UI 呈现规范。
+
+PlanShip 在项目分析前运行 `preflight.py`，会自动检测并从上述**固定 GitHub 地址**安装缺失依赖。**仅使用本机已经存在的 Codex / Claude Skills 根目录**，不创建新的 Agent 目录，不覆盖现有 Skill，不删除旧版，遇到重名冲突/网络异常就停止。安装后还必须实际读取两份 `SKILL.md`；仅 clone 成功不算加载成功。
+
+```powershell
+python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --json
+# 只检查，不自动安装：
+python "$HOME\.agents\skills\plan-ship\scripts\preflight.py" --project "D:\workspace\my-project" --read-content --no-auto-install --json
+```
+
+如果 PlanShip 不在 `.agents/skills`，请把上方脚本路径替换成实际安装位置。自动安装细节参阅 [依赖规范](docs/dependencies.md)。
+
 ## 安装前准备
 
 - Python 3.11+：运行自带脚本和测试；本地安装无需额外后台服务。
-- **必须存在并能实际读取** `ai-coding-collaboration` 和 `intelligent-ui` 两个依赖 Skill。缺失时按规则 `BLOCKED`；不是自动下载或默默降级。
+- **必须存在并能实际读取** `code-pact` 和 `gen-ui` 两个依赖 Skill。缺失时将从下述已核实的 GitHub 仓库自动安装到**已存在**的 Codex / Claude Skills 目录；安装失败仍 `BLOCKED`，且安装不代表 Agent 已加载。
 - 如果需要自动化测试证据，项目自身还需安装对应测试运行环境（如 `pytest` / Maven / Gradle）。
 
 ### Windows · Codex（推荐）
@@ -116,7 +133,7 @@ flowchart TD
 
 ```powershell
 # 依赖探测只读，不代表 Agent 已加载
-python .\scripts\preflight.py --project "D:\workspace\your-project" --read-content --json
+python .\scripts\preflight.py --project "D:\workspace\your-project" --read-content --no-auto-install --json
 
 # 测试素材探测，无必需文件时不询问
 python .\scripts\test_input_probe.py --workspace "D:\workspace\your-project"

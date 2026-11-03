@@ -8,7 +8,7 @@
 $plan-ship 方案编写：
 给现有 Java 订单查询接口增加按创建日期筛选功能。
 不要修改订单创建、支付和退款逻辑。
-请先加载 ai-coding-collaboration 与 intelligent-ui，分析当前代码；
+请先加载 code-pact 与 gen-ui，分析当前代码；
 结合会话附件和可选的 test-dir，输出初稿，再做两轮实际评审补强。
 最终 MD 保存到 .idea/docs/订单日期筛选/，并生成非技术读者可懂的同名解释副本。
 ```

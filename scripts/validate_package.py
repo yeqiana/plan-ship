@@ -13,17 +13,17 @@ REQUIRED_FILES = (
     "AGENTS.md", ".editorconfig", ".gitattributes", ".gitignore",
     "agents/openai.yaml", ".github/workflows/validate.yml",
     "references/module-plan.md", "references/module-execute.md",
-    "references/plain-language.md", "references/skill-discovery.md",
-    "scripts/route_manager.py", "scripts/test_input_probe.py", "scripts/doc_registry.py",
+    "references/plain-language.md", "references/skill-discovery.md", "references/gen-ui.md",
+    "scripts/route_manager.py", "scripts/ensure_dependencies.py", "scripts/test_input_probe.py", "scripts/doc_registry.py",
     "scripts/validate_evidence.py", "scripts/validate_package.py",
     "tests/test_tools.py", "tests/test_v24.py", "tests/test_package_contract.py",
-    "docs/quality-gates.md", "docs/migration.md", "examples/quickstart.md",
+    "docs/quality-gates.md", "docs/migration.md", "docs/dependencies.md", "examples/quickstart.md",
     "evals/manual-evaluation.md", "evals/discovery-baseline.md",
     "docs/faq.md", "docs/architecture.md", "docs/comparison.md",
     "docs/language-policy.md", "docs/geo-methodology.md", "docs/github-metadata.md",
     "examples/java-order-total/README.md", "examples/java-order-total/src/OrderTotal.java",
     "examples/java-order-total/src/OrderTotalCheck.java",
-    "tests/test_java_example.py", "tests/test_discovery_contract.py",
+    "tests/test_java_example.py", "tests/test_discovery_contract.py", "tests/test_dependency_bootstrap.py",
 )
 TEXT_SUFFIXES = {".md", ".py", ".yaml", ".yml", ".json", ".txt", ".ps1"}
 SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".venv", "dist", "evidence"}
@@ -94,13 +94,22 @@ def validate(root: Path) -> list[str]:
         content = skill.read_text(encoding="utf-8")
         if not re.match(r"\A---\nname: plan-ship\n", content):
             failures.append("SKILL.md 的正式 name 不是 plan-ship")
-        for marker in ("$plan-ship", "/plan-ship", "ai-coding-collaboration", "intelligent-ui", "test-dir", "两轮", "BLOCKED", "implementation plan", "acceptance", "review", "genuine", "No fake"):
+        for marker in ("$plan-ship", "/plan-ship", "code-pact", "gen-ui", "test-dir", "两轮", "BLOCKED", "implementation plan", "acceptance", "review", "genuine", "No fake", "github.com/yeqiana/code-pact", "github.com/yeqiana/gen-ui", "preflight.py"):
             if marker not in content:
                 failures.append(f"SKILL.md 缺少关键约束：{marker}")
+    installer = root / "scripts/ensure_dependencies.py"
+    if installer.is_file():
+        bootstrap = installer.read_text(encoding="utf-8")
+        for marker in ("https://github.com/yeqiana/code-pact.git", "https://github.com/yeqiana/gen-ui.git", "BLOCKED_CONFLICT", "BLOCKED_NO_EXISTING_SKILLS_ROOT"):
+            if marker not in bootstrap:
+                failures.append(f"依赖自动安装器缺少安全门禁：{marker}")
+    preflight = root / "scripts/preflight.py"
+    if preflight.is_file() and "--no-auto-install" not in preflight.read_text(encoding="utf-8"):
+        failures.append("前置检查缺少只读诊断开关 --no-auto-install")
     manifest = root / "agents/openai.yaml"
     if manifest.is_file():
         meta = manifest.read_text(encoding="utf-8")
-        for marker in ("$plan-ship", "ai-coding-collaboration", "intelligent-ui", "plan", "test", "acceptance", "方案"):
+        for marker in ("$plan-ship", "code-pact", "gen-ui", "plan", "test", "acceptance", "方案"):
             if marker not in meta:
                 failures.append(f"agents/openai.yaml 缺少双语发现信息：{marker}")
     route = root / "scripts/route_manager.py"

@@ -138,7 +138,7 @@ class ContentAndBusinessTests(unittest.TestCase):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'skills'
-            for name in ('ai-coding-collaboration', 'intelligent-ui'):
+            for name in ('code-pact', 'gen-ui'):
                 base = root / name
                 (base / 'references').mkdir(parents=True)
                 (base / 'SKILL.md').write_text('---\nname: ' + name + '\ndescription: test\n---\n# rules\n参见 references/usage.md', encoding='utf8')
@@ -146,8 +146,8 @@ class ContentAndBusinessTests(unittest.TestCase):
             with patch('discover_skills.roots', return_value=[('codex-user', root)]):
                 ready = check(Path(temp), load=True)
                 self.assertEqual('READ_FILESYSTEM_CONTENT_AGENT_CONFIRMATION_REQUIRED', ready['preflight_status'])
-                self.assertEqual(2, len(ready['skills']['intelligent-ui']['content_read']['files']))
-                (root / 'intelligent-ui' / 'references' / 'usage.md').unlink()
+                self.assertEqual(2, len(ready['skills']['gen-ui']['content_read']['files']))
+                (root / 'gen-ui' / 'references' / 'usage.md').unlink()
                 failed = check(Path(temp), load=True)
                 self.assertEqual('BLOCKED_CONTENT_READ', failed['preflight_status'])
 
@@ -177,9 +177,7 @@ class ContentAndBusinessTests(unittest.TestCase):
             (workspace / 'test_business.py').rename(workspace / 'test_behavior.py')
             good = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_behavior.py'], cwd=workspace, capture_output=True, text=True)
             self.assertEqual(0, good.returncode, good.stdout + good.stderr)
-            # Change the file length as well as behavior: CPython's timestamp+size pyc cache
-            # can reuse stale bytecode if two subprocesses run within the same second on CI.
-            (workspace / 'app.py').write_text('def compute(a):\n    return a * 400\n', encoding='utf8')
+            (workspace / 'app.py').write_text('def compute(a):\n    return a * 4\n', encoding='utf8')
             bad = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_behavior.py'], cwd=workspace, capture_output=True, text=True)
             self.assertNotEqual(0, bad.returncode, '变更真实业务结果后，测试必须失败')
 
