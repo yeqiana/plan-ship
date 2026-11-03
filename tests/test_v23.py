@@ -177,7 +177,9 @@ class ContentAndBusinessTests(unittest.TestCase):
             (workspace / 'test_business.py').rename(workspace / 'test_behavior.py')
             good = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_behavior.py'], cwd=workspace, capture_output=True, text=True)
             self.assertEqual(0, good.returncode, good.stdout + good.stderr)
-            (workspace / 'app.py').write_text('def compute(a):\n    return a * 4\n', encoding='utf8')
+            # Change the file length as well as behavior: CPython's timestamp+size pyc cache
+            # can reuse stale bytecode if two subprocesses run within the same second on CI.
+            (workspace / 'app.py').write_text('def compute(a):\n    return a * 400\n', encoding='utf8')
             bad = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_behavior.py'], cwd=workspace, capture_output=True, text=True)
             self.assertNotEqual(0, bad.returncode, '变更真实业务结果后，测试必须失败')
 
