@@ -1,0 +1,9 @@
+{
+  "merged_local": true,
+  "integration_head": "<FINAL_GIT_HEAD>",
+  "source_fingerprint": "<FINAL_SOURCE_FINGERPRINT>",
+  "reviewed_worktrees": [
+    {"name": "local-module-a", "base": "<LOCAL_BASE_COMMIT>", "commit": "<LOCAL_WORKTREE_COMMIT>", "changed_files": ["src/example.java"], "reviewed": true}
+  ],
+  "conflict_resolution": "填写实际冲突、改动归属、代码复核、合并顺序与合并后测试情况；无冲突也要明确写无冲突"
+}

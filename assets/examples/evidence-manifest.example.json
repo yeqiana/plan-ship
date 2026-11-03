@@ -1,0 +1,17 @@
+{
+  "schema_version": "2.1",
+  "plan_file": ".idea/docs/demo/1. demo-实施测试验收方案.md",
+  "runs_file": ".idea/docs/demo/evidence/runs.json",
+  "integration": {
+    "worktrees_used": false,
+    "merged": true,
+    "merge_audit": ""
+  },
+  "cases": [
+    {"id": "TC-207", "status": "PASS", "run_ids": ["RUN-REPLACE"]},
+    {"id": "TC-208", "status": "PASS", "run_ids": ["RUN-REPLACE"]}
+  ],
+  "acceptance": [
+    {"id": "ACC-207", "requirement_id": "REQ-207", "status": "PASS", "run_ids": ["RUN-REPLACE"], "notes": "填写合并后对应场景的真实结果与日志观察点"}
+  ]
+}

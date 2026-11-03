@@ -1,0 +1,8 @@
+
+__pycache__/
+.pytest_cache/
+*.pyc
+.idea/
+*.log
+evidence/
+.venv/
