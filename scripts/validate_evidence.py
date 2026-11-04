@@ -297,6 +297,16 @@ def _check_controlled_mutation_run(evidence: dict, workspace: Path, plan_dir: Pa
             trace.get('test_source_sha256') != data.get('test_source_sha256') or
             data.get('mutated_source_sha256') not in trace.get('loaded_hashes', [])):
         errors.append(f'{aid} 无法证明目标 pytest 测试在实际执行时加载了变异生产源码')
+    phases = data.get('phase_outcomes')
+    if phases != {'baseline':'PASS','mutation':'FAIL','restored':'PASS'}:
+        errors.append(f'{aid} 缺少原始 PASS → 变异 FAIL → 恢复 PASS 的完整对照证据')
+    for phase in ('baseline_trace','restored_trace'):
+        proof=data.get(phase)
+        if (not isinstance(proof,dict) or proof.get('nodeid')!=data.get('pytest_nodeid') or
+                proof.get('target_module_loaded') is not True or proof.get('call_failed') is not False or
+                proof.get('test_source_sha256')!=data.get('test_source_sha256') or
+                data.get('baseline_source_sha256') not in proof.get('loaded_hashes',[])):
+            errors.append(f'{aid} {phase} 原始/恢复阶段缺少有效 PASS 加载证明')
     report = local_file(workspace, data.get('negative_report_path'))
     log = local_file(workspace, data.get('negative_log_path'))
     if (not report or not log or not safe_inside(report, plan_dir) or not safe_inside(log, plan_dir)
@@ -389,8 +399,8 @@ def validate_counterfactual_evidence(manifest_file: Path, plan_file: Path,
             mutated = mutated_snapshot.read_bytes()
             patch_bytes = mutation_patch.read_bytes()
             expected_patch = ''.join(difflib.unified_diff(
-                baseline.decode('utf-8').splitlines(keepends=True),
-                mutated.decode('utf-8').splitlines(keepends=True),
+                baseline.decode('utf-8').replace('\r\n','\n').splitlines(keepends=True),
+                mutated.decode('utf-8').replace('\r\n','\n').splitlines(keepends=True),
                 fromfile='a/' + rel_source.as_posix(),
                 tofile='b/' + rel_source.as_posix())).encode('utf-8')
             if (not expected_patch or baseline == mutated or
@@ -398,7 +408,7 @@ def validate_counterfactual_evidence(manifest_file: Path, plan_file: Path,
                     sha256_file(source) != evidence['baseline_source_sha256'] or
                     sha256_file(mutated_snapshot) != evidence['mutated_source_sha256'] or
                     sha256_file(mutation_patch) != evidence['mutation_patch_sha256'] or
-                    patch_bytes != expected_patch):
+                    patch_bytes.replace(b'\r\n',b'\n') != expected_patch):
                 errors.append(f'{aid} 生产源码变异前后指纹或可重建补丁不匹配')
         except (OSError, UnicodeError, ValueError) as exc:
             errors.append(f'{aid} 无法读取源码变异快照或差异：{exc}')

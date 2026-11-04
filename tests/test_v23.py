@@ -181,6 +181,10 @@ class ContentAndBusinessTests(unittest.TestCase):
             good = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_behavior.py'], cwd=workspace, capture_output=True, text=True)
             self.assertEqual(0, good.returncode, good.stdout + good.stderr)
             (workspace / 'app.py').write_text('def compute(a):\n    return a * 4\n', encoding='utf8')
+            # A same-second rewrite on Windows may reuse the old .pyc mtime/size.
+            # Remove cached bytecode to force the second subprocess to import the mutation.
+            for cached in workspace.rglob('*.pyc'):
+                cached.unlink()
             bad = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'test_behavior.py'], cwd=workspace, capture_output=True, text=True)
             self.assertNotEqual(0, bad.returncode, '变更真实业务结果后，测试必须失败')
 

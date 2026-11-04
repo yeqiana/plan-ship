@@ -208,5 +208,5 @@ class NoOverwriteRouteTests(unittest.TestCase):
             home = Path(tmp)
             result = manage(home, 'install', ('claude',))['claude']
             self.assertTrue(result['changed'])
-            self.assertIn(START, (home / '.claude' / 'CLAUDE.md').read_text())
+            self.assertIn(START, (home / '.claude' / 'CLAUDE.md').read_text(encoding='utf-8'))
             self.assertEqual('unchanged', manage(home, 'install', ('claude',))['claude']['state'])

@@ -45,7 +45,7 @@ class RouteTests(unittest.TestCase):
         self.assertFalse((self.home/'.codex').exists())
         result=manage(self.home,'remove',('claude',))['claude']
         self.assertEqual('MANUAL_PATCH_REQUIRED',result['state'])
-        self.assertIn(START,(self.home/'.claude'/'CLAUDE.md').read_text())
+        self.assertIn(START,(self.home/'.claude'/'CLAUDE.md').read_text(encoding='utf-8'))
     def test_route_symlink_refused(self):
         folder=self.home/'.codex';folder.mkdir()
         target=self.home/'outside';target.write_text('用户文件',encoding='utf8')

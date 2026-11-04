@@ -34,6 +34,44 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def verify_local_images(markdown: str, directory: Path) -> list[str]:
+    """Check only image elements that the offline renderer actually emits."""
+    from html.parser import HTMLParser
+    from urllib.parse import unquote
+    from plain_html import _safe_image
+
+    class Images(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.sources = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == 'img':
+                self.sources.append(dict(attrs).get('src', ''))
+
+    parsed = Images()
+    parsed.feed(render_plain_html(markdown).decode('utf-8'))
+    errors = []
+    for src in parsed.sources:
+        if src.startswith('data:'):
+            continue
+        if _safe_image(src) is None:
+            errors.append(f'HTML 图片路径不安全：{src}')
+            continue
+        target = directory / unquote(src)
+        try:
+            current = directory
+            for segment in Path(unquote(src)).parts:
+                current = current / segment
+                if current.is_symlink() or (hasattr(current, 'is_junction') and current.is_junction()):
+                    raise DocumentError('图片路径存在符号链接或 junction')
+            if not target.resolve().is_relative_to(directory.resolve()) or not target.is_file():
+                raise DocumentError('图片不存在或路径逃逸')
+        except (DocumentError, OSError, ValueError):
+            errors.append(f'HTML 本地图片不存在或路径逃逸：{src}')
+    return errors
+
+
 def valid_name(name: str) -> str:
     if not isinstance(name, str) or not name or name != name.strip() or len(name) > 100:
         raise DocumentError('方案名称/文档标题为空、前后含空格或过长')
@@ -68,6 +106,16 @@ def root_for(workspace: Path, name: str) -> Path:
             raise DocumentError('项目文档真实路径逃逸 workspace，BLOCKED') from exc
         parent = child
     return parent
+
+
+def safe_explanation(folder: Path) -> Path:
+    """Validate the lexical explanation directory before any managed write/read."""
+    child = folder / '大白话解释'
+    if child.is_symlink() or (hasattr(child, 'is_junction') and child.is_junction()):
+        raise DocumentError('大白话解释目录禁止符号链接或 junction')
+    if child.resolve().parent != folder.resolve():
+        raise DocumentError('大白话解释目录逃逸方案目录，BLOCKED')
+    return child
 
 
 def safe_file(path: Path) -> None:
@@ -123,6 +171,7 @@ def _path_state(path: Path) -> str | None:
 def _transaction_folder(folder: Path) -> Path:
     txn = folder / TRANSACTION
     safe_file(txn)
+    safe_explanation(folder)
     return txn
 
 
@@ -301,10 +350,7 @@ def _entry_payload(folder: Path, index: dict) -> tuple[bytes, bytes]:
 
 
 def _check_entry(folder: Path, index: dict) -> None:
-    explain_dir = folder / '大白话解释'
-    safe_file(explain_dir)
-    if explain_dir.resolve().parent != folder.resolve():
-        raise DocumentError('大白话解释目录不能是指向方案外部的符号链接或 junction')
+    explain_dir = safe_explanation(folder)
     entry = explain_dir / ENTRY
     safe_file(entry)
     recorded = index.get('index_html_sha256')
@@ -377,6 +423,9 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
     hash_value = digest(tech_data)
     plain_text = plain_text.replace('\r\n', '\n').rstrip() + f'\n\n> {MARKER}`{hash_value}`\n'
     plain_data = plain_text.encode('utf-8')
+    image_errors = verify_local_images(plain_text, safe_explanation(folder))
+    if image_errors:
+        raise DocumentError('; '.join(image_errors))
     with exclusive(folder):
         recover_transaction(folder)
         index = get_index(folder, logical_name=name)
@@ -412,9 +461,7 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
             # must match its registered hash exactly.
             if html_dest.exists() and digest(html_dest.read_bytes()) != existing.get('html_sha256'):
                 raise DocumentError('大白话 HTML 已被人工修改或不是登记产物，拒绝覆盖')
-        explain_dir = folder / '大白话解释'
-        if explain_dir.is_symlink() or explain_dir.resolve().parent != folder.resolve():
-            raise DocumentError('大白话目录不得指向方案外部')
+        explain_dir = safe_explanation(folder)
         explain_dir.mkdir(exist_ok=True)
         index['documents'][key] = {
             'number': number, 'title': title, 'filename': filename,
@@ -449,6 +496,7 @@ def sync_html(workspace: Path, name: str, *, dry_run: bool = True) -> int:
 
 def _sync_html_locked(folder: Path, index: dict, dry_run: bool) -> int:
     count = 0
+    safe_explanation(folder)
     _check_entry(folder, index)
     registered = set()
     payload: list[tuple[Path, bytes]] = []
@@ -466,7 +514,11 @@ def _sync_html_locked(folder: Path, index: dict, dry_run: bool) -> int:
                 digest(technical.read_bytes()) != item.get('technical_sha256') or
                 digest(plain.read_bytes()) != item.get('plain_sha256')):
             raise DocumentError('正式文档未经登记或曾被修改，不允许自动回填 HTML')
-        data = render_plain_html(plain.read_text(encoding='utf-8-sig'), Path(filename).stem)
+        text = plain.read_text(encoding='utf-8-sig')
+        image_errors = verify_local_images(text, safe_explanation(folder))
+        if image_errors:
+            raise DocumentError('; '.join(image_errors))
+        data = render_plain_html(text, Path(filename).stem)
         recorded = item.get('html_sha256')
         if target.exists():
             if not isinstance(recorded, str) or digest(target.read_bytes()) != recorded:
@@ -480,7 +532,7 @@ def _sync_html_locked(folder: Path, index: dict, dry_run: bool) -> int:
         item['html_sha256'] = digest(data)
         payload.append((target, data))
         count += 1
-    explanation = folder / '大白话解释'
+    explanation = safe_explanation(folder)
     if explanation.exists():
         for html_path in explanation.glob('*.html'):
             if html_path.name != ENTRY and html_path.name not in registered:
@@ -539,6 +591,7 @@ def verify_file(file: Path, workspace: Path) -> list[str]:
         if digest(plain) != item.get('plain_sha256') or f'{MARKER}`{digest(data)}`' not in plain.decode('utf-8-sig'):
             errors.append('大白话文档缺失、遭修改或关联的技术版本已过期')
         plain_text = plain.decode('utf-8-sig')
+        errors.extend(verify_local_images(plain_text, safe_explanation(folder)))
         if not html_file.is_file():
             errors.append('大白话文档缺少同名 HTML 副本')
         elif (item.get('html_sha256') != digest(html_file.read_bytes())
