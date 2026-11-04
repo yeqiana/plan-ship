@@ -116,7 +116,7 @@ An additional test-case addendum appears only if needed; stable numbering never 
 python .\scripts\preflight.py --project "D:\workspace\my-project" --host codex --read-content --json  # optional read-only
 python .\scripts\test_input_probe.py --workspace "D:\workspace\my-project"
 python .\scripts\route_manager.py              # read-only route check
-python .\scripts\route_manager.py --install    # opt-in only: edits user-level host instructions
+python .\scripts\route_manager.py --install    # opt-in: existing user instructions get a manual patch, never overwritten
 ```
 
 For former installations, see the [migration guide](docs/migration.md). Never overwrite existing user instructions without consent.
@@ -164,3 +164,9 @@ The optional validators now reject trivially self-confirming Python/Java asserti
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## v1.3.2 — Acceptance evidence is not just consistency
+
+A green JUnit report plus matching source hashes is **not** final business acceptance. `validate_evidence.py` defaults to `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`. Use `--gate acceptance` to require a failing counterfactual JUnit testcase, matching failure-log fingerprints and an associated restored integrated run for every accepted requirement; the result is still `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED`. See [evidence contract](references/evidence-contract.md).
+
+Opt-in `route_manager.py --install` uses exclusive creation for missing user instruction files. If `AGENTS.md` / `CLAUDE.md` already exists, it returns a **manual merge snippet** and never replaces it, avoiding the unprotected compare/rename race.

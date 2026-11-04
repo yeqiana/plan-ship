@@ -219,8 +219,8 @@ def main() -> int:
         if not args.plan or not args.manifest:
             errors.append("手动验收最终门禁要求 --plan 和 --manifest")
         else:
-            from validate_evidence import validate_evidence
-            errors.extend(f"交付证据：{e}" for e in validate_evidence(args.manifest, args.plan, args.workspace))
+            from validate_evidence import validate_counterfactual_evidence
+            errors.extend(f"交付证据：{e}" for e in validate_counterfactual_evidence(args.manifest, args.plan, args.workspace))
     if errors:
         print(f"FAIL ({len(errors)}):")
         for error in errors:

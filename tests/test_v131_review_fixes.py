@@ -94,23 +94,14 @@ class PlainReviewTests(unittest.TestCase):
 
 
 class RouterConcurrencyTests(unittest.TestCase):
-    def test_detected_uncooperative_writer_keeps_new_user_rule_and_stops(self):
+    def test_existing_user_rules_are_never_replaced(self):
         with tempfile.TemporaryDirectory() as tmp:
             home=Path(tmp)
             p=home/'.codex'/'AGENTS.md';p.parent.mkdir()
             p.write_text('# Rule A\n',encoding='utf8')
-            native=route_manager._assert_unchanged
-            injected=False
-            def change_then_verify(path,expected,identity):
-                nonlocal injected
-                if not injected:
-                    injected=True
-                    path.write_text('# Rule A\n# Rule B NEW!\n',encoding='utf8')
-                return native(path,expected,identity)
-            with patch.object(route_manager,'_assert_unchanged',side_effect=change_then_verify):
-                with self.assertRaisesRegex(ValueError,'BLOCKED_ROUTE_CONFLICT'):
-                    route_manager.manage(home,'install',('codex',))
-            self.assertIn('Rule B NEW!',p.read_text(encoding='utf8'))
+            result=route_manager.manage(home,'install',('codex',))['codex']
+            self.assertEqual('MANUAL_PATCH_REQUIRED',result['state'])
+            self.assertEqual('# Rule A\n',p.read_text(encoding='utf8'))
             self.assertFalse((p.parent/'.plan-ship-route.lock').exists())
             self.assertFalse((p.parent/'AGENTS.md.plan-ship.backup').exists())
 

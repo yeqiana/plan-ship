@@ -44,3 +44,10 @@
 - 核对 Git 提交及远端分支；不可把“本地 commit 成功”称为“push 成功”。
 
 **无 Python 时：** 宿主原生文件操作仍可创建双副本与稳定编号，但必须逐项手动复核，并标注“自动编号/一致性和事务回滚未验证”。核心业务测试的真实性要求不降低。
+
+## v1.3.2 最终验收门禁
+
+- `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED` 仅说明源指纹/报告/用例映射一致，不是验收通过。
+- `--gate acceptance` 逐需求检查真实失败的反事实 JUnit XML、对应测试、日志 SHA-256 以及恢复 RUN。缺失或错误则阻断。
+- `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED` 也只证明证据形式可核查，尚须独立评审故障注入是否针对关键业务预期。
+- `validate_docs.py --type manual` 不再在仅有一致性文件时放行；业务人工复验始终标记为 `未执行` 直到用户实际操作。

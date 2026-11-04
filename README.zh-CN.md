@@ -188,3 +188,9 @@ PlanShip 采用**英文权威 Skill 规范 + 中文关键词兼容 + 中英双�
 ## License
 
 MIT，详见 [LICENSE](LICENSE)。
+
+## v1.3.2 反事实验收与路由安全
+
+`validate_evidence.py` 默认只校验证据文件一致性，返回 `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`，**不能据此批准业务验收**。最终验收证据使用 `--gate acceptance`，要求每个验收需求提供真实失败的负向 JUnit 用例、日志哈希以及恢复后通过的集成运行编号。通过后仍是 `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED`，必须审查故障注入的正确性与独立预期，不代替人工复验。详见 [证据契约](references/evidence-contract.md)。
+
+`route_manager.py --install` 现在只会对不存在的宿主路由文件进行排他创建。已经存在 `AGENTS.md` 或 `CLAUDE.md` 时，返回需要人工合并的路由片段，不再自动覆盖，避免并发编辑导致用户规则丢失。

@@ -37,7 +37,7 @@ python "<SKILL_ROOT>/scripts/validate_docs.py" --type testcases --file "<PLAN_DI
 填写 `assets/examples/evidence-manifest.example.json`（必须替换示例 RUN），对每个 TC 标记状态并引用最终 RUN，对每个 REQ 关联 ACC 通过条件、实际观察、RUN。执行：
 
 ```text
-python "<SKILL_ROOT>/scripts/validate_evidence.py" --manifest "<PLAN_DIR>/evidence/manifest.json" --plan "<PLAN_DIR>/<number>. <方案名称>-实施测试验收方案.md" --workspace "<PROJECT>"
+python "<SKILL_ROOT>/scripts/validate_evidence.py" --gate acceptance --manifest "<PLAN_DIR>/evidence/manifest.json" --plan "<PLAN_DIR>/<number>. <方案名称>-实施测试验收方案.md" --workspace "<PROJECT>"
 ```
 
 失败、阻断、未运行、源码/方案改变、日志失效、缺最终合并证据时不能通过。**并行时先 merge、再测、最后才验收**。

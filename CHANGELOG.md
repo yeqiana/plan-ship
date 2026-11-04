@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 — 2026-11-04
+
+- Split optional evidence validation into consistency-only and strict counterfactual evidence gates. The default output can no longer be confused with final acceptance; manual document validation requires failed-case evidence and restored run correlation.
+- Reject obvious unreachable Python/Java assertions and arithmetic-constant short-circuit bypasses; add real pytest negative-control regression tests.
+- Opt-in user route management no longer replaces existing user instructions; it only emits a snippet for manual merge. New route files are created exclusively.
+- Preserve core Skill independence from Python, WebCodex and additional Skills. Tests and static checks are not semantic or human acceptance.
+
 ## 1.3.1 — 2026-11-03
 
 - Reject self-comparisons and simple aliases as business-test evidence in Python and Java; mark assertion checks as structural only, and require independent expected outcomes plus real P0 mutation/negative-control evidence for acceptance.

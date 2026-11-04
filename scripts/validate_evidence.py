@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from project_snapshot import safe_inside, sha256_file, snapshot, SnapshotError
@@ -238,20 +239,94 @@ def validate_evidence(manifest_file: Path, plan_file: Path, workspace: Path) -> 
     return errors
 
 
+def validate_counterfactual_evidence(manifest_file: Path, plan_file: Path,
+                                      workspace: Path) -> list[str]:
+    """Additional FINAL gate. A green integration report is only consistency.
+
+    Evidence is locally writable and cannot prove authorship. This demands a
+    separately captured failing JUnit testcase and its immutable-at-check-time
+    log hashes for each accepted requirement, plus a restored integrated run.
+    Human review of the controlled mutation is still required.
+    """
+    errors = validate_evidence(manifest_file, plan_file, workspace)
+    if errors:
+        return errors
+    workspace = workspace.resolve()
+    plan_dir = plan_file.resolve().parent
+    try:
+        manifest = load_json(manifest_file)
+        runs = load_json(workspace / manifest['runs_file'])['runs']
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        return ['无法读取反事实验收关联的测试运行记录：' + str(exc)]
+    run_index = {r.get('run_id'): r for r in runs if isinstance(r, dict)}
+    acceptance = manifest.get('acceptance', [])
+    for item in acceptance:
+        if not isinstance(item, dict):
+            errors.append('反事实验收条目必须是对象')
+            continue
+        aid = item.get('id', 'UNKNOWN')
+        evidence = item.get('counterfactual')
+        if not isinstance(evidence, dict):
+            errors.append(f'{aid} 缺少反事实失败证据：一致性检查通过不等于业务验收通过')
+            continue
+        expected = ('test_id', 'mutation_description', 'negative_report_path',
+                    'negative_report_sha256', 'negative_log_path', 'negative_log_sha256',
+                    'restored_run_id')
+        if any(not isinstance(evidence.get(field), str) or not evidence[field].strip()
+               for field in expected):
+            errors.append(f'{aid} 反事实记录字段不完整：{expected}')
+            continue
+        if len(evidence['mutation_description'].strip()) < 12:
+            errors.append(f'{aid} 未说明具体故障注入和业务预期')
+        restored = run_index.get(evidence['restored_run_id'])
+        if not restored or evidence['restored_run_id'] not in item.get('run_ids', []):
+            errors.append(f'{aid} 恢复后执行记录未关联最终验收 RUN')
+        elif evidence['test_id'] not in restored.get('verified_test_ids', []):
+            errors.append(f'{aid} 恢复后 RUN 未真实覆盖该反事实 test_id')
+        report = local_file(workspace, evidence['negative_report_path'])
+        log = local_file(workspace, evidence['negative_log_path'])
+        if not report or not log or not safe_inside(report, plan_dir) or not safe_inside(log, plan_dir):
+            errors.append(f'{aid} 反事实报告或日志必须位于同一方案目录')
+            continue
+        if sha256_file(report) != evidence['negative_report_sha256'] or sha256_file(log) != evidence['negative_log_sha256']:
+            errors.append(f'{aid} 反事实失败报告或日志哈希不一致')
+            continue
+        if report.stat().st_size > 5 * 1024 * 1024 or not log.stat().st_size:
+            errors.append(f'{aid} 反事实报告超限或日志为空')
+            continue
+        try:
+            xml = ET.parse(report).getroot()
+            cases = xml.findall('.//testcase') if xml.tag == 'testsuites' else xml.findall('.//testcase')
+            failures = [case for case in cases
+                        if f"{case.get('classname', '')}::{case.get('name', '')}" == evidence['test_id']
+                        and (case.find('failure') is not None or case.find('error') is not None)]
+            if not failures:
+                errors.append(f'{aid} 反事实报告没有目标测试真实失败的 JUnit 记录')
+        except ET.ParseError as exc:
+            errors.append(f'{aid} 反事实 JUnit 报告无法解析：{exc}')
+    return errors
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--manifest", required=True, type=Path)
     p.add_argument("--plan", required=True, type=Path)
     p.add_argument("--workspace", required=True, type=Path)
+    p.add_argument('--gate', choices=('consistency', 'acceptance'), default='consistency',
+                   help='Only acceptance requires actual counterfactual failure evidence')
     args = p.parse_args()
-    errs = validate_evidence(args.manifest, args.plan, args.workspace)
+    errs = (validate_counterfactual_evidence(args.manifest, args.plan, args.workspace)
+            if args.gate == 'acceptance' else
+            validate_evidence(args.manifest, args.plan, args.workspace))
     if errs:
         print(f"FAIL ({len(errs)} 项证据门禁)")
         for err in errs:
             print(" -", err)
         return 1
-    print("PASS: 需求—测试—合并后源码指纹—日志—验收关联一致。")
-    print("注意：日志和 JSON 均为本地可编辑文件；通过表示一致性检查，不保证证据真实或独立验收完成。")
+    if args.gate == 'acceptance':
+        print('COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED: 真实失败报告已关联，仍需独立审查故障注入及业务预期。')
+    else:
+        print('CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED: 只验证证据文件一致性，未检查故障注入，不可宣称业务验收通过。')
     return 0
 
 

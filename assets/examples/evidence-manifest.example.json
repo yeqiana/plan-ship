@@ -12,6 +12,15 @@
     {"id": "TC-208", "status": "PASS", "run_ids": ["RUN-REPLACE"]}
   ],
   "acceptance": [
-    {"id": "ACC-207", "requirement_id": "REQ-207", "status": "PASS", "run_ids": ["RUN-REPLACE"], "notes": "填写合并后对应场景的真实结果与日志观察点"}
+    {"id": "ACC-207", "requirement_id": "REQ-207", "status": "PASS", "run_ids": ["RUN-REPLACE"], "notes": "填写合并后对应场景的真实结果与日志观察点",
+     "counterfactual": {
+       "test_id": "REPLACE_WITH_REAL_FRAMEWORK_TEST_ID",
+       "mutation_description": "描述在隔离副本中注入的真实故障、独立业务预期及源码恢复操作",
+       "negative_report_path": "REPLACE_WITH_REAL_FAILED_JUNIT_PATH_WITHIN_PLAN",
+       "negative_report_sha256": "REPLACE_WITH_SHA256_OF_FAILED_JUNIT",
+       "negative_log_path": "REPLACE_WITH_REAL_FAILED_TEST_LOG_PATH_WITHIN_PLAN",
+       "negative_log_sha256": "REPLACE_WITH_SHA256_OF_FAILED_TEST_LOG",
+       "restored_run_id": "REPLACE_WITH_REAL_INTEGRATED_PASS_RUN_ID"
+     }}
   ]
 }

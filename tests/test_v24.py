@@ -23,19 +23,19 @@ class RouteTests(unittest.TestCase):
         result=manage(self.home,'check')
         self.assertEqual('missing',result['codex']['state'])
         self.assertFalse((self.home/'.codex').exists())
-    def test_install_is_idempotent_and_preserves_user_notes(self):
+    def test_install_returns_manual_patch_when_user_rules_already_exist(self):
         path=self.home/'.codex'/'AGENTS.md';path.parent.mkdir()
         path.write_text('# 用户已有的永久规则\n\n只使用本地 Runner。\n',encoding='utf8')
         before=path.read_text(encoding='utf8')
-        manage(self.home,'install'); first=path.read_text(encoding='utf8')
-        self.assertIn(before.strip(),first)
-        self.assertEqual(1,first.count(START))
-        manage(self.home,'install');self.assertEqual(first,path.read_text(encoding='utf8'))
-        backup=path.with_name(path.name+'.plan-ship.backup')
-        self.assertEqual(before,backup.read_text(encoding='utf8'))
-        manage(self.home,'remove')
-        self.assertIn('只使用本地 Runner。',path.read_text(encoding='utf8'))
-        self.assertNotIn(START,path.read_text(encoding='utf8'))
+        result=manage(self.home,'install',('codex',))['codex']
+        self.assertEqual('MANUAL_PATCH_REQUIRED',result['state'])
+        self.assertIn(START,result['route_snippet'])
+        self.assertEqual(before,path.read_text(encoding='utf8'))
+        self.assertFalse(path.with_name(path.name+'.plan-ship.backup').exists())
+        # Missing route files can be created exclusively without overwriting anything.
+        manage(self.home,'install',('claude',))
+        self.assertIn(START,(self.home/'.claude'/'CLAUDE.md').read_text(encoding='utf8'))
+        self.assertEqual('unchanged',manage(self.home,'install',('claude',))['claude']['state'])
     def test_corrupt_markers_rejected(self):
         with self.assertRaisesRegex(ValueError,'标记'):
             update_text('私有指令\n'+START,'install')
@@ -43,8 +43,9 @@ class RouteTests(unittest.TestCase):
         manage(self.home,'install',('claude',))
         self.assertTrue((self.home/'.claude'/'CLAUDE.md').is_file())
         self.assertFalse((self.home/'.codex').exists())
-        manage(self.home,'remove',('claude',))
-        self.assertNotIn(START,(self.home/'.claude'/'CLAUDE.md').read_text())
+        result=manage(self.home,'remove',('claude',))['claude']
+        self.assertEqual('MANUAL_PATCH_REQUIRED',result['state'])
+        self.assertIn(START,(self.home/'.claude'/'CLAUDE.md').read_text())
     def test_route_symlink_refused(self):
         folder=self.home/'.codex';folder.mkdir()
         target=self.home/'outside';target.write_text('用户文件',encoding='utf8')

@@ -402,7 +402,10 @@ class EvidenceTests(unittest.TestCase):
         manual = publish_test_doc(self.ws, "验收方案", "manual", "验收方案-手动测试验收方案", fill_template("manual-acceptance.md"))
         cmd = [sys.executable, str(SCRIPTS / "validate_docs.py"), "--type", "manual", "--workspace", str(self.ws), "--file", str(manual), "--plan", str(self.plan), "--manifest", str(self.manifest)]
         p = run(*cmd, cwd=ROOT)
-        self.assertEqual(0, p.returncode, p.stdout + p.stderr)
+        # Final manual-document validation now requires genuine mutation failure
+        # evidence, not just fresh/green JUnit consistency checks.
+        self.assertEqual(1, p.returncode, p.stdout + p.stderr)
+        self.assertIn('缺少反事实失败证据', p.stdout)
         self.file.write_text('print("modified")', encoding="utf8")
         p = run(*cmd, cwd=ROOT)
         self.assertEqual(1, p.returncode, p.stdout + p.stderr)

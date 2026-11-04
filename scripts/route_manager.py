@@ -5,7 +5,6 @@ import argparse
 import contextlib
 import json
 import os
-import tempfile
 from pathlib import Path
 
 START = '<!-- plan-ship:route:start v1.0.0 -->'
@@ -105,32 +104,25 @@ def manage(home: Path, action: str, targets: tuple[str, ...] = ('codex', 'claude
             if updated == original:
                 output[host] = {'path': str(path), 'state': 'unchanged', 'changed': False}
                 continue
-            fd, temp = tempfile.mkstemp(prefix='.plan-ship-route-', dir=path.parent)
+            if before is not None:
+                # There is no universal atomic CAS for an existing user file.
+                # Never rename over user-owned rules, even after a final read.
+                # Emit an instruction-only preview; let the user edit/merge.
+                _assert_unchanged(path, before, identity)
+                output[host] = {'path': str(path), 'state': 'MANUAL_PATCH_REQUIRED',
+                                'changed': False, 'route_snippet': ROUTE,
+                                'instruction': 'Merge/remove the marked PlanShip block manually; existing user instructions were not overwritten.'}
+                continue
+            # Exclusive file creation prevents races even with uncooperative tools.
             try:
-                with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as fp:
+                with path.open('x', encoding='utf-8', newline='\n') as fp:
                     fp.write(updated)
                     fp.flush()
                     os.fsync(fp.fileno())
-                # Re-read after preparing the replacement and before the backup.
-                _assert_unchanged(path, before, identity)
-                if before is not None:
-                    backup = path.with_name(path.name + '.plan-ship.backup')
-                    if backup.is_symlink():
-                        raise ValueError('BLOCKED_ROUTE_CONFLICT: unsafe backup symlink')
-                    try:
-                        with backup.open('xb') as fp:
-                            fp.write(before)
-                            fp.flush()
-                            os.fsync(fp.fileno())
-                    except FileExistsError:
-                        pass  # Never rewrite previous user backups.
-                # Final fingerprint check; if an external writer raced, fail closed.
-                _assert_unchanged(path, before, identity)
-                os.replace(temp, path)
-            finally:
-                if os.path.exists(temp):
-                    os.unlink(temp)
+            except FileExistsError as exc:
+                raise ValueError('BLOCKED_ROUTE_CONFLICT: another process created user instructions') from exc
             output[host] = {'path': str(path), 'state': action, 'changed': True}
+            continue
     return output
 
 

@@ -75,3 +75,19 @@ python "$skillRoot\scripts\validate_docs.py" --type manual --workspace "$project
 - **源码层硬性校验**：Python 真实框架测试需引用项目内非测试模块并从业务函数调用得到断言结果，忽略恒真短路与无关常量；不能只 `import` 然后断言常量。Java/JUnit 源码检查同样拒绝仅有断言而未观察实际业务方法的用例。
 - **动态行为复核**：对核心 TC，在隔离、可丢弃的副本中让目标业务函数返回错误值或故意制造失败，运行同一真实测试，预期出现失败；记录测试选择、原始结果、变化点、失败日志、恢复状态，禁止在最终工作树上为了证明而破坏业务代码。若无法进行则说明范围及未验证状态，不能以扫描结果代替。
 - **不能证明的事**：当前记录器不是可信执行环境；不能防止所有精心编造的测试或授权操作者修改证据。只有权限隔离、独立审查和真实环境回归才能进一步提高证明强度。
+
+## v1.3.2：一致性检查与最终验收证据分离
+
+仅运行 `validate_evidence.py` 默认进行 **consistency-only** 检查。即使返回退出码 0，状态也只是 `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`；绝不可作为业务验收通过。
+
+需要审核反事实失败证据时，显式运行：
+
+```powershell
+python "<SKILL_ROOT>/scripts/validate_evidence.py" --gate acceptance --manifest "<PLAN_DIR>/evidence/manifest.json" --plan "<PLAN_DIR>/1. 正式方案.md" --workspace "<PROJECT>"
+```
+
+最终验收 `acceptance[]` 的每个条目必须附带 `counterfactual` 对象，字段包括：`test_id`（须对应恢复后真实通过的测试）、`mutation_description`（具体故障注入与独立预期，不能空泛）、`negative_report_path`、`negative_report_sha256`、`negative_log_path`、`negative_log_sha256`、`restored_run_id`。负向报告必须是同一方案内真实产生的 JUnit XML，且对应 `test_id` 具有 failure/error；日志、报告哈希匹配；恢复 RUN 必须关联最终验收并涵盖该测试。没有此记录、哈希被修改或测试未失败，一律不准放行。
+
+这些本地文件仍可被拥有工作区写权限的人伪造，验收状态只能是 `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED`：**独立审查者仍须核对故障注入、业务预期和恢复过程**。真正业务/用户验收不由脚本自动宣布。`validate_docs.py --type manual` 也会要求这一级证据，防止只靠一致性检查生成终版。
+
+Python AST 静态检查补充拒绝明显不可达的 `if False` / `while False` / `return` 后断言，和 `or (1+1==2)` 等恒真短路；Java 基本过滤 `if(false){...}`。这只是有限保守检测，无法穷举动态条件或反射控制流，真实负向测试才是关键。

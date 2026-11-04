@@ -19,6 +19,77 @@ TEST_ID = re.compile(r"^[a-zA-Z_][\w.\-$]*(?:::[a-zA-Z_][\w\[\] ,.-]*)+$")
 TC_ID = re.compile(r"^TC-\d{3,}$")
 
 
+def _literal_value(node: ast.AST):
+    """Evaluate only small side-effect-free literals; never evaluate Python code."""
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float, bool, str, type(None)):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.Not, ast.UAdd, ast.USub)):
+        value = _literal_value(node.operand)
+        if isinstance(node.op, ast.Not):
+            return not value
+        if type(value) in (int, float):
+            return +value if isinstance(node.op, ast.UAdd) else -value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        a, b = _literal_value(node.left), _literal_value(node.right)
+        if type(a) in (int, float) and type(b) in (int, float) and abs(a) < 100000 and abs(b) < 100000:
+            result = a+b if isinstance(node.op, ast.Add) else a-b if isinstance(node.op, ast.Sub) else a*b
+            if abs(result) < 100000000:
+                return result
+    raise ValueError('not a bounded literal')
+
+
+def _constant_bool(node: ast.AST) -> bool | None:
+    try:
+        return bool(_literal_value(node))
+    except (ValueError, TypeError, OverflowError):
+        pass
+    if isinstance(node, ast.Compare):
+        try:
+            values = [_literal_value(x) for x in [node.left, *node.comparators]]
+            checks = []
+            for op, a, b in zip(node.ops, values, values[1:]):
+                if isinstance(op, (ast.Eq, ast.Is)): checks.append(a == b)
+                elif isinstance(op, (ast.NotEq, ast.IsNot)): checks.append(a != b)
+                elif isinstance(op, ast.Lt): checks.append(a < b)
+                elif isinstance(op, ast.LtE): checks.append(a <= b)
+                elif isinstance(op, ast.Gt): checks.append(a > b)
+                elif isinstance(op, ast.GtE): checks.append(a >= b)
+                else: return None
+            return all(checks)
+        except (ValueError, TypeError):
+            return None
+    if isinstance(node, ast.BoolOp):
+        vals = [_constant_bool(x) for x in node.values]
+        if isinstance(node.op, ast.Or):
+            return True if True in vals else False if all(v is False for v in vals) else None
+        if isinstance(node.op, ast.And):
+            return False if False in vals else True if all(v is True for v in vals) else None
+    return None
+
+
+def _reachable_nodes(statements: list[ast.stmt]):
+    """Conservative static reachability: skip literal-false branches and code after return."""
+    for stmt in statements:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(stmt, ast.If):
+            condition = _constant_bool(stmt.test)
+            yield from _reachable_nodes(stmt.body if condition is True else stmt.orelse if condition is False else stmt.body + stmt.orelse)
+            continue
+        if isinstance(stmt, ast.While) and _constant_bool(stmt.test) is False:
+            yield from _reachable_nodes(stmt.orelse)
+            continue
+        yield stmt
+        if isinstance(stmt, (ast.With, ast.AsyncWith, ast.For, ast.AsyncFor, ast.While, ast.Try)):
+            branches = [stmt.body, stmt.orelse] if hasattr(stmt, 'orelse') else [stmt.body]
+            if isinstance(stmt, ast.Try):
+                branches += [handler.body for handler in stmt.handlers] + [stmt.finalbody]
+            for branch in branches:
+                yield from _reachable_nodes(branch)
+        if isinstance(stmt, (ast.Return, ast.Raise, ast.Break, ast.Continue)):
+            break
+
+
 def _obvious_true(node: ast.AST) -> bool:
     """Reject common tautologies, including constant short-circuit expressions."""
     if isinstance(node, ast.Constant):
@@ -30,23 +101,7 @@ def _obvious_true(node: ast.AST) -> bool:
             return all(_obvious_true(v) for v in node.values)
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return _obvious_false(node.operand)
-    if isinstance(node, ast.Compare):
-        try:
-            values = [ast.literal_eval(v) for v in [node.left, *node.comparators]]
-        except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
-            return False
-        checks = []
-        for op, lhs, rhs in zip(node.ops, values, values[1:]):
-            try:
-                checks.append((isinstance(op, ast.Eq) and lhs == rhs) or
-                              (isinstance(op, ast.Is) and lhs is rhs) or
-                              (isinstance(op, ast.NotEq) and lhs != rhs) or
-                              (isinstance(op, ast.Gt) and lhs > rhs) or
-                              (isinstance(op, ast.Lt) and lhs < rhs))
-            except (ValueError, TypeError):
-                return False
-        return bool(checks) and all(checks)
-    return False
+    return _constant_bool(node) is True
 
 
 def _obvious_false(node: ast.AST) -> bool:
@@ -106,8 +161,13 @@ def _grounded_python_assertion(expr: ast.AST, functions: set[str],
     if _obvious_true(expr):
         return False
     if isinstance(expr, ast.BoolOp):
-        # Only one independently observable branch is needed for this structural
-        # probe; _obvious_true has already rejected constant short circuits.
+        # An OR may pass without checking business results if any branch is a
+        # known tautology. AND may fail before observing results; static scans
+        # alone are never final proof, but exclude obvious bypasses.
+        if isinstance(expr.op, ast.Or) and any(_constant_bool(x) is True for x in expr.values):
+            return False
+        if isinstance(expr.op, ast.And) and any(_constant_bool(x) is False for x in expr.values):
+            return False
         return any(_grounded_python_assertion(x, functions, modules, assigned)
                    for x in expr.values)
     if isinstance(expr, ast.Compare):
@@ -140,8 +200,9 @@ def _python_source_has_assertion(path: Path, test_name: str, workspace: Path) ->
     functions, modules = _project_imports(tree, workspace, path)
     if not functions and not modules:
         return False
+    reachable = list(_reachable_nodes(func.body))
     assigned: set[str] = set()
-    for stmt in ast.walk(func):
+    for stmt in reachable:
         if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
             value = stmt.value
             if value and _production_calls(value, functions, modules):
@@ -152,14 +213,14 @@ def _python_source_has_assertion(path: Path, test_name: str, workspace: Path) ->
     # `expected = actual` with `actual` must not be an independent oracle.
     for _ in range(4):
         earlier = len(assigned)
-        for stmt in ast.walk(func):
+        for stmt in reachable:
             if isinstance(stmt, (ast.Assign, ast.AnnAssign)) and isinstance(stmt.value, ast.Name) and stmt.value.id in assigned:
                 targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
                 for target in targets:
                     assigned.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
         if len(assigned) == earlier:
             break
-    for part in ast.walk(func):
+    for part in reachable:
         if isinstance(part, ast.Assert) and _grounded_python_assertion(part.test, functions, modules, assigned):
             return True
         if isinstance(part, ast.With):
@@ -219,8 +280,15 @@ def _java_source_has_assertion(path: Path, test_name: str) -> bool:
                 depth -= 1
                 if depth != 0: continue
                 body = text[start:pos]
-                # Remove comments before extracting production calls/assertions.
+                # Remove comments and literal-false branches. This remains a
+                # conservative source heuristic; real mutation tests are mandatory
+                # for final critical acceptance.
                 body = re.sub(r'/\*.*?\*/|//[^\n]*', '', body, flags=re.S)
+                previous = None
+                while body != previous:
+                    previous = body
+                    body = re.sub(r'\bif\s*\(\s*false\s*\)\s*\{[^{}]*\}', '', body)
+                    body = re.sub(r'\bif\s*\(\s*false\s*\)\s*[^;{}]+;', '', body)
                 ignored = {'Assertions', 'Assert', 'assert', 'Mockito', 'System', 'Math',
                            'Thread', 'List', 'Collections', 'Stream', 'Paths', 'Files',
                            'logger', 'log', 'verify', 'assertThat'}
