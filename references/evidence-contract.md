@@ -86,8 +86,15 @@ python "$skillRoot\scripts\validate_docs.py" --type manual --workspace "$project
 python "<SKILL_ROOT>/scripts/validate_evidence.py" --gate acceptance --manifest "<PLAN_DIR>/evidence/manifest.json" --plan "<PLAN_DIR>/1. 正式方案.md" --workspace "<PROJECT>"
 ```
 
-最终验收 `acceptance[]` 的每个条目必须附带 `counterfactual` 对象，字段包括：`test_id`（须对应恢复后真实通过的测试）、`mutation_description`（具体故障注入与独立预期，不能空泛）、`negative_report_path`、`negative_report_sha256`、`negative_log_path`、`negative_log_sha256`、`restored_run_id`。负向报告必须是同一方案内真实产生的 JUnit XML，且对应 `test_id` 具有 failure/error；日志、报告哈希匹配；恢复 RUN 必须关联最终验收并涵盖该测试。没有此记录、哈希被修改或测试未失败，一律不准放行。
+最终验收 `acceptance[]` 的每个条目必须附带 `counterfactual` 对象，字段包括：`test_id`（须对应恢复后真实通过的测试）、`mutation_description`（具体故障注入与独立预期，不能空泛）、`negative_report_path`、`negative_report_sha256`、`negative_log_path`、`negative_log_sha256`、`restored_run_id`，以及 `mutation_source_path`（必须是生产源码）、`baseline_source_sha256`（当前已恢复源码）、`mutated_snapshot_path`/`mutated_source_sha256`（变异源码快照）、`mutation_patch_path`/`mutation_patch_sha256`（原始源码到变异源码的统一差异）、`negative_test_source_sha256`（与恢复后 RUN 相同的测试源码指纹）。负向报告必须是同一方案内真实产生的 JUnit XML，且对应 `test_id` 具有 failure/error；日志、报告哈希匹配；恢复 RUN 必须关联最终验收并涵盖该测试。没有此记录、哈希被修改或测试未失败，一律不准放行。
 
-这些本地文件仍可被拥有工作区写权限的人伪造，验收状态只能是 `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED`：**独立审查者仍须核对故障注入、业务预期和恢复过程**。真正业务/用户验收不由脚本自动宣布。`validate_docs.py --type manual` 也会要求这一级证据，防止只靠一致性检查生成终版。
+这些本地文件仍可被拥有工作区写权限的人伪造，验收状态只能是 `COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED`：**独立审查者仍须核对故障注入、业务预期和恢复过程**。真正业务/用户验收不由脚本自动宣布。`validate_docs.py --type manual` 也会要求这一级证据，防止只靠一致性检查生成终版。
 
 Python AST 静态检查补充拒绝明显不可达的 `if False` / `while False` / `return` 后断言，和 `or (1+1==2)` 等恒真短路；Java 基本过滤 `if(false){...}`。这只是有限保守检测，无法穷举动态条件或反射控制流，真实负向测试才是关键。
+
+
+## v1.3.3 变异证据防测试预期作弊
+
+`--gate acceptance` 必须校验变异发生在生产源码（不允许 `tests/`、`test-dir/` 等），当前已恢复文件 SHA 与基线一致，变异快照与源文件不同，并且 `difflib.unified_diff` 可从这两个文件精确重建登记的补丁。恢复后测试方法源码与 `negative_test_source_sha256` 一致。仅通过修改测试预期制造红色报告，没有真实生产变异快照及补丁时不能过门禁。
+
+**限制**：可修改的本地快照、补丁、XML 与日志仍无法给出可信执行来源证明。自动工具只能检查相互一致性；独立评审者必须核对实际执行命令、故障注入是否生效、期望是否独立、恢复是否完整。若不可核实，业务验收仍 `未验证`。

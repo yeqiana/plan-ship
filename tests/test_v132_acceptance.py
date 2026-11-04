@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import difflib
 import json
 import subprocess
 import sys
@@ -74,8 +75,10 @@ class CounterfactualEvidenceTests(unittest.TestCase):
         original = f.file.read_text(encoding='utf8')
         negative_report = f.docs / 'evidence' / 'negative.xml'
         negative_log = f.docs / 'evidence' / 'negative.log'
+        mutated = original.replace('return a + b', 'return a + b + 100')
+        assert mutated != original
         try:
-            f.file.write_text(original.replace('return a + b', 'return a + b + 100'), encoding='utf8')
+            f.file.write_text(mutated, encoding='utf8')
             result = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_real.py', f'--junitxml={negative_report}'], cwd=f.ws, capture_output=True, text=True)
             self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
             negative_log.write_text(result.stdout + '\n' + result.stderr, encoding='utf8')
@@ -83,7 +86,26 @@ class CounterfactualEvidenceTests(unittest.TestCase):
             f.file.write_text(original, encoding='utf8')
         def sha(path):
             return hashlib.sha256(path.read_bytes()).hexdigest()
+        evidence_dir = f.docs / 'evidence'
+        snapshot = evidence_dir / 'mutated-calc.py.snapshot'
+        diff_file = evidence_dir / 'mutation.patch'
+        snapshot.write_text(mutated, encoding='utf8')
+        patch = ''.join(difflib.unified_diff(original.splitlines(keepends=True), mutated.splitlines(keepends=True),
+                             fromfile='a/' + f.file.relative_to(f.ws).as_posix(),
+                             tofile='b/' + f.file.relative_to(f.ws).as_posix()))
+        diff_file.write_text(patch, encoding='utf8')
+        restored_run = self.fixture.runs_data['runs'][-1] if hasattr(self.fixture, 'runs_data') else None
+        if restored_run is None:
+            restored_run = json.loads(self.fixture.runs.read_text(encoding='utf8'))['runs'][-1]
+        actual_test_source = list(restored_run['test_sources'].values())[0]
         f.manifest_data['acceptance'][0]['counterfactual'] = {
+            'mutation_source_path': f.file.relative_to(f.ws).as_posix(),
+            'baseline_source_sha256': sha(f.file),
+            'mutated_snapshot_path': snapshot.relative_to(f.ws).as_posix(),
+            'mutated_source_sha256': sha(snapshot),
+            'mutation_patch_path': diff_file.relative_to(f.ws).as_posix(),
+            'mutation_patch_sha256': sha(diff_file),
+            'negative_test_source_sha256': actual_test_source,
             'test_id': 'tests.test_real::test_add',
             'mutation_description': 'Force add(3,4) to return 107 instead of 7, then restore source',
             'negative_report_path': negative_report.relative_to(f.ws).as_posix(),
@@ -112,7 +134,7 @@ class CounterfactualEvidenceTests(unittest.TestCase):
         self.attach_actual_negative_control()
         checked = subprocess.run(base + ['--gate', 'acceptance'], capture_output=True, text=True, cwd=f.ws)
         self.assertEqual(0, checked.returncode, checked.stdout + checked.stderr)
-        self.assertIn('COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED', checked.stdout)
+        self.assertIn('COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED', checked.stdout)
         self.assertNotIn('ACCEPTANCE_PASS', checked.stdout)
 
     def test_negative_test_wrong_id_or_tamper_blocks(self):
@@ -124,6 +146,49 @@ class CounterfactualEvidenceTests(unittest.TestCase):
         self.fixture.write_manifest()
         log.write_text('tampered', encoding='utf8')
         self.assertTrue(any('哈希' in x for x in validate_counterfactual_evidence(self.fixture.manifest, self.fixture.plan, self.fixture.ws)))
+
+    def test_forged_negative_via_changed_expectation_with_no_production_mutation_rejected(self):
+        """Reproduce the exact v1.3.2 review: red report from bad test only."""
+        f=self.fixture
+        target=f.ws/'tests'/'test_real.py'
+        clean=target.read_text(encoding='utf8')
+        report=f.docs/'evidence'/'negative-forged.xml'
+        log=f.docs/'evidence'/'negative-forged.log'
+        try:
+            target.write_text(clean.replace('== 7', '== 107'), encoding='utf8')
+            run=subprocess.run([sys.executable,'-m','pytest','-q','tests/test_real.py',f'--junitxml={report}'],cwd=f.ws,capture_output=True,text=True)
+            self.assertNotEqual(run.returncode, 0)
+            log.write_text(run.stdout+'\n'+run.stderr,encoding='utf8')
+        finally:
+            target.write_text(clean,encoding='utf8')
+        def sha(x):return hashlib.sha256(x.read_bytes()).hexdigest()
+        f.manifest_data['acceptance'][0]['counterfactual']={
+            'test_id':'tests.test_real::test_add',
+            'mutation_description':'Changed only test expectation from 7 to 107 and restored it',
+            'negative_report_path':report.relative_to(f.ws).as_posix(),
+            'negative_report_sha256':sha(report),
+            'negative_log_path':log.relative_to(f.ws).as_posix(),
+            'negative_log_sha256':sha(log),
+            'restored_run_id':f.record_id,
+        }
+        f.write_manifest()
+        self.assertTrue(any('生产源码变异' in e for e in validate_counterfactual_evidence(f.manifest,f.plan,f.ws)))
+
+    def test_mutated_snapshot_tamper_and_patch_mismatch_rejected(self):
+        self.attach_actual_negative_control()
+        info=self.fixture.manifest_data['acceptance'][0]['counterfactual']
+        patch=self.fixture.ws/info['mutation_patch_path']
+        patch.write_text(patch.read_text(encoding='utf8')+'\n# bogus\n', encoding='utf8')
+        info['mutation_patch_sha256']=hashlib.sha256(patch.read_bytes()).hexdigest()
+        self.fixture.write_manifest()
+        self.assertTrue(any('补丁' in x for x in validate_counterfactual_evidence(self.fixture.manifest,self.fixture.plan,self.fixture.ws)))
+
+    def test_mutating_test_file_instead_of_production_rejected(self):
+        self.attach_actual_negative_control()
+        info=self.fixture.manifest_data['acceptance'][0]['counterfactual']
+        info['mutation_source_path']='tests/test_real.py'
+        self.fixture.write_manifest()
+        self.assertTrue(any('生产源码' in x for x in validate_counterfactual_evidence(self.fixture.manifest,self.fixture.plan,self.fixture.ws)))
 
 
 class NoOverwriteRouteTests(unittest.TestCase):

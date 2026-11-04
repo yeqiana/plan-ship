@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import difflib
+import hashlib
 import json
 import re
 import sys
@@ -278,6 +280,59 @@ def validate_counterfactual_evidence(manifest_file: Path, plan_file: Path,
             continue
         if len(evidence['mutation_description'].strip()) < 12:
             errors.append(f'{aid} 未说明具体故障注入和业务预期')
+        # Bind negative control to a concrete PRODUCTION source mutation, not
+        # a changed test expectation. This verifies a replayable source delta;
+        # it cannot authenticate the actor that ran the negative test.
+        proof_fields = ('mutation_source_path', 'baseline_source_sha256',
+                        'mutated_snapshot_path', 'mutated_source_sha256',
+                        'mutation_patch_path', 'mutation_patch_sha256',
+                        'negative_test_source_sha256')
+        if any(not isinstance(evidence.get(k), str) or not evidence[k].strip() for k in proof_fields):
+            errors.append(f'{aid} 缺少生产源码变异及未改变测试源码的绑定证据：{proof_fields}')
+            continue
+        rel_source = Path(evidence['mutation_source_path'])
+        forbidden = {'.idea', '.git', 'tests', 'test', 'test-dir', '__pycache__', '.venv', 'node_modules'}
+        source = local_file(workspace, evidence['mutation_source_path'])
+        if (not source or rel_source.is_absolute() or '..' in rel_source.parts
+                or set(rel_source.parts) & forbidden or source.stem.startswith('test_')
+                or source.suffix.lower() not in ('.py', '.java', '.js', '.ts', '.go', '.rs')):
+            errors.append(f'{aid} 变异目标必须是当前工作区内的生产源码，不能修改测试、配置或证据文件')
+            continue
+        mutated_snapshot = local_file(workspace, evidence['mutated_snapshot_path'])
+        mutation_patch = local_file(workspace, evidence['mutation_patch_path'])
+        if (not mutated_snapshot or not mutation_patch or
+                not safe_inside(mutated_snapshot, plan_dir) or
+                not safe_inside(mutation_patch, plan_dir) or
+                'evidence' not in mutated_snapshot.relative_to(plan_dir).parts or
+                'evidence' not in mutation_patch.relative_to(plan_dir).parts):
+            errors.append(f'{aid} 变异快照与差异记录必须位于当前方案 evidence/ 内')
+            continue
+        try:
+            baseline = source.read_bytes()
+            mutated = mutated_snapshot.read_bytes()
+            patch_bytes = mutation_patch.read_bytes()
+            expected_patch = ''.join(difflib.unified_diff(
+                baseline.decode('utf-8').splitlines(keepends=True),
+                mutated.decode('utf-8').splitlines(keepends=True),
+                fromfile='a/' + rel_source.as_posix(),
+                tofile='b/' + rel_source.as_posix())).encode('utf-8')
+            if (not expected_patch or baseline == mutated or
+                    len(baseline) > 2*1024*1024 or len(mutated) > 2*1024*1024 or
+                    sha256_file(source) != evidence['baseline_source_sha256'] or
+                    sha256_file(mutated_snapshot) != evidence['mutated_source_sha256'] or
+                    sha256_file(mutation_patch) != evidence['mutation_patch_sha256'] or
+                    patch_bytes != expected_patch):
+                errors.append(f'{aid} 生产源码变异前后指纹或可重建补丁不匹配')
+        except (OSError, UnicodeError, ValueError) as exc:
+            errors.append(f'{aid} 无法读取源码变异快照或差异：{exc}')
+        restored_run = run_index.get(evidence['restored_run_id'])
+        sources = restored_run.get('test_sources') if isinstance(restored_run, dict) else None
+        if (not isinstance(sources, dict) or
+                evidence['negative_test_source_sha256'] not in sources.values() or
+                not any(sha256_file(local_file(workspace, path)) == digest
+                        for path, digest in sources.items()
+                        if local_file(workspace, path))):
+            errors.append(f'{aid} 负向测试必须绑定恢复后未改动的测试源码指纹')
         restored = run_index.get(evidence['restored_run_id'])
         if not restored or evidence['restored_run_id'] not in item.get('run_ids', []):
             errors.append(f'{aid} 恢复后执行记录未关联最终验收 RUN')
@@ -324,7 +379,7 @@ def main() -> int:
             print(" -", err)
         return 1
     if args.gate == 'acceptance':
-        print('COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED: 真实失败报告已关联，仍需独立审查故障注入及业务预期。')
+        print('COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED: 生产源码变异快照、补丁、失败报告已关联；仍无法仅凭可写文件证明执行来源，必须独立审查故障注入与业务预期。')
     else:
         print('CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED: 只验证证据文件一致性，未检查故障注入，不可宣称业务验收通过。')
     return 0

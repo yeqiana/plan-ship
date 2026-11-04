@@ -21,6 +21,14 @@ TC_ID = re.compile(r"^TC-\d{3,}$")
 
 def _literal_value(node: ast.AST):
     """Evaluate only small side-effect-free literals; never evaluate Python code."""
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == 'bool' and len(node.args) == 1 and not node.keywords):
+        return bool(_literal_value(node.args[0]))
+    if isinstance(node, ast.IfExp):
+        condition = _constant_bool(node.test)
+        if condition is not None:
+            return _literal_value(node.body if condition else node.orelse)
+        raise ValueError('conditional value unknown')
     if isinstance(node, ast.Constant) and type(node.value) in (int, float, bool, str, type(None)):
         return node.value
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.Not, ast.UAdd, ast.USub)):
@@ -39,6 +47,12 @@ def _literal_value(node: ast.AST):
 
 
 def _constant_bool(node: ast.AST) -> bool | None:
+    if isinstance(node, ast.IfExp):
+        condition = _constant_bool(node.test)
+        if condition is not None:
+            return _constant_bool(node.body if condition else node.orelse)
+        left, right = _constant_bool(node.body), _constant_bool(node.orelse)
+        return left if left is not None and left == right else None
     try:
         return bool(_literal_value(node))
     except (ValueError, TypeError, OverflowError):
@@ -160,6 +174,12 @@ def _grounded_python_assertion(expr: ast.AST, functions: set[str],
     """
     if _obvious_true(expr):
         return False
+    if isinstance(expr, ast.IfExp):
+        condition = _constant_bool(expr.test)
+        if condition is not None:
+            return _grounded_python_assertion(expr.body if condition else expr.orelse, functions, modules, assigned)
+        return (_grounded_python_assertion(expr.body, functions, modules, assigned)
+                and _grounded_python_assertion(expr.orelse, functions, modules, assigned))
     if isinstance(expr, ast.BoolOp):
         # An OR may pass without checking business results if any branch is a
         # known tautology. AND may fail before observing results; static scans
@@ -325,6 +345,21 @@ def _java_source_has_assertion(path: Path, test_name: str) -> bool:
                         if sum(bool(depends(x)) for x in compared) != 1:
                             continue
                         return True
+                    if a.group(1) in ('assertTrue', 'assertFalse'):
+                        expr = args[0].strip()
+                        if re.search(r'\|\|\s*(?:true|1\s*==\s*1)\b|\b(?:true|1\s*==\s*1)\s*\|\|', expr):
+                            continue
+                        comparison = re.match(r'(?s)^\s*(.+?)\s*(==|!=|<=|>=|<|>)\s*(.+?)\s*$', expr)
+                        if comparison:
+                            lhs, rhs = comparison.group(1), comparison.group(3)
+                            if re.sub(r'\s+', '', lhs) == re.sub(r'\s+', '', rhs):
+                                continue
+                            if sum(bool(depends(x)) for x in (lhs, rhs)) != 1:
+                                continue
+                            return True
+                        if depends(expr) and not re.search(r'\btrue\s*\|\||\|\|\s*true\b', expr):
+                            return True
+                        continue
                     if any(depends(x) for x in args):
                         return True
                 break

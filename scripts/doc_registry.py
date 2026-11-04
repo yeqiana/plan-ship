@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""方案目录与技术/大白话文档的一对一幂等发布。仅标准库。"""
+"""方案目录与技术/大白话 MD+HTML 文档的幂等发布。仅标准库。"""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,8 @@ import re
 import sys
 import shutil
 from pathlib import Path
+
+from plain_html import render as render_plain_html
 
 INDEX = '.document-index.json'
 LOCK = '.document-index.lock'
@@ -157,9 +159,9 @@ def recover_transaction(folder: Path) -> str:
             if not prepare.is_file() or prepare.is_symlink():
                 raise DocumentError('缺少 journal/prepare，无法证明目标文件未改动；需人工检查事务目录')
             plan = json.loads(prepare.read_text(encoding='utf-8'))
-            if plan.get('schema') != 'prepare-v1' or not isinstance(plan.get('files'), list) or len(plan['files']) != 3:
+            if plan.get('schema') != 'prepare-v1' or not isinstance(plan.get('files'), list) or len(plan['files']) not in (2, 3, 4):
                 raise DocumentError('prepare schema 损坏，不能自动清理')
-            permitted = {'prepare.json'} | {f'backup-{i}.bin' for i in range(3)}
+            permitted = {'prepare.json'} | {f'backup-{i}.bin' for i in range(len(plan['files']))}
             # Atomic writes may leave known temporary names when a process is
             # terminated before the final rename. No target writes occur until
             # journal.json exists, so these are safe *if* the prepare check
@@ -179,7 +181,7 @@ def recover_transaction(folder: Path) -> str:
             _clear_transaction(txn)
             return 'PREPARE_ABORTED_WITHOUT_TARGET_WRITES'
         manifest = json.loads(journal.read_text(encoding='utf-8'))
-        if manifest.get('schema') != 'v2.3' or len(manifest['files']) != 3:
+        if manifest.get('schema') != 'v2.3' or len(manifest['files']) not in (2, 3, 4):
             raise ValueError('事务日志 schema 不符')
         items = manifest['files']
         states = []
@@ -349,6 +351,10 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
         filename = f'{number}. {title}.md'
         tech_dest = folder / filename
         plain_dest = folder / '大白话解释' / filename
+        html_dest = plain_dest.with_suffix('.html')
+        html_data = render_plain_html(plain_text, Path(filename).stem)
+        if existing is None and html_dest.exists():
+            raise DocumentError('HTML 目标已存在且没有索引登记，拒绝覆盖用户文件')
         for dest in (tech_dest, plain_dest):
             safe_file(dest)
             if dest.exists() and (existing is None or dest.name != existing.get('filename')):
@@ -359,6 +365,11 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
             for old_file, hash_field in ((tech_dest, 'technical_sha256'), (plain_dest, 'plain_sha256')):
                 if not old_file.is_file() or digest(old_file.read_bytes()) != existing.get(hash_field):
                     raise DocumentError('已登记文档被手工修改/缺失，请先对账后同步发布，拒绝覆盖用户改动')
+            # Upgrading an older record without HTML is allowed only if no
+            # conflicting unmanaged HTML file exists. Existing indexed HTML
+            # must match its registered hash exactly.
+            if html_dest.exists() and digest(html_dest.read_bytes()) != existing.get('html_sha256'):
+                raise DocumentError('大白话 HTML 已被人工修改或不是登记产物，拒绝覆盖')
         explain_dir = folder / '大白话解释'
         if explain_dir.is_symlink() or explain_dir.resolve().parent != folder.resolve():
             raise DocumentError('大白话目录不得指向方案外部')
@@ -366,10 +377,51 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
         index['documents'][key] = {
             'number': number, 'title': title, 'filename': filename,
             'technical_sha256': hash_value, 'plain_sha256': digest(plain_data),
+            'html_sha256': digest(html_data),
         }
         transactional_publish(folder, [(tech_dest, tech_data), (plain_dest, plain_data),
-            (folder / INDEX, (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode())])
+            (html_dest, html_data), (folder / INDEX, (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode())])
     return tech_dest, plain_dest
+
+
+def sync_html(workspace: Path, name: str) -> int:
+    """Safely backfill HTML for registered legacy plain Markdown, never overwrite custom HTML.
+
+    Each document commits HTML and index together, so interrupted batches can
+    be resumed without corrupting earlier documents. No technical HTML is made.
+    """
+    folder = root_for(workspace, name)
+    count = 0
+    with exclusive(folder):
+        recover_transaction(folder)
+        index = get_index(folder, logical_name=name)
+        for item in index['documents'].values():
+            if not isinstance(item, dict) or not isinstance(item.get('filename'), str):
+                raise DocumentError('旧版索引异常，禁止批量写入 HTML')
+            filename = item['filename']
+            technical = folder / filename
+            plain = folder / '大白话解释' / filename
+            target = plain.with_suffix('.html')
+            for path in (technical, plain, target):
+                safe_file(path)
+            if (not NUMERIC.fullmatch(filename) or
+                    not technical.is_file() or not plain.is_file() or
+                    digest(technical.read_bytes()) != item.get('technical_sha256') or
+                    digest(plain.read_bytes()) != item.get('plain_sha256')):
+                raise DocumentError('正式文档未经登记或曾被修改，不允许自动回填 HTML')
+            data = render_plain_html(plain.read_text(encoding='utf-8-sig'), Path(filename).stem)
+            if target.exists():
+                if item.get('html_sha256') != digest(target.read_bytes()) or data != target.read_bytes():
+                    raise DocumentError('已有 HTML 非本发布器登记的副本，拒绝覆盖')
+                continue
+            if item.get('html_sha256'):
+                raise DocumentError('原已登记 HTML 遗失，需人工恢复，禁止静默重建')
+            item['html_sha256'] = digest(data)
+            payload = [(target, data), (folder / INDEX,
+                        (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))]
+            transactional_publish(folder, payload)
+            count += 1
+    return count
 
 
 def verify_file(file: Path, workspace: Path) -> list[str]:
@@ -402,7 +454,9 @@ def verify_file(file: Path, workspace: Path) -> list[str]:
             errors.append('文档顺序编号与索引不一致')
         safe_file(folder / '大白话解释')
         plain_file = folder / '大白话解释' / file.name
+        html_file = plain_file.with_suffix('.html')
         safe_file(plain_file)
+        safe_file(html_file)
         if not file.is_file() or not plain_file.is_file():
             errors.append('缺少技术文档或同名大白话解释副本')
             return errors
@@ -412,6 +466,11 @@ def verify_file(file: Path, workspace: Path) -> list[str]:
         if digest(plain) != item.get('plain_sha256') or f'{MARKER}`{digest(data)}`' not in plain.decode('utf-8-sig'):
             errors.append('大白话文档缺失、遭修改或关联的技术版本已过期')
         plain_text = plain.decode('utf-8-sig')
+        if not html_file.is_file():
+            errors.append('大白话文档缺少同名 HTML 副本')
+        elif (item.get('html_sha256') != digest(html_file.read_bytes())
+              or html_file.read_bytes() != render_plain_html(plain_text, file.stem)):
+            errors.append('大白话 HTML 未登记、被修改或与 Markdown 不一致')
         from plain_quality import evaluate as check_explanation
         errors.extend(check_explanation(data.decode('utf-8-sig'), plain_text))
         if '图解' not in plain_text and '```mermaid' not in plain_text:
@@ -452,6 +511,9 @@ def verify_all(workspace: Path, name: str) -> list[str]:
     for file in (folder / '大白话解释').glob('*.md'):
         if file.name not in known:
             errors.append(f'存在无对应技术文档的大白话副本：{file.name}')
+    for file in (folder / '大白话解释').glob('*.html'):
+        if file.with_suffix('.md').name not in known:
+            errors.append(f'存在未登记或孤立的大白话 HTML：{file.name}')
     for file in folder.rglob('*.md'):
         relative = file.relative_to(folder)
         if len(relative.parts) > 1 and relative.parts[0] not in ('.drafts', '大白话解释'):
@@ -462,7 +524,7 @@ def verify_all(workspace: Path, name: str) -> list[str]:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='action', required=True)
-    for action in ('init', 'publish', 'verify', 'recover'):
+    for action in ('init', 'publish', 'verify', 'recover', 'sync-html'):
         s = sub.add_parser(action)
         s.add_argument('--workspace', required=True, type=Path)
         s.add_argument('--name', required=True)
@@ -477,7 +539,9 @@ def main() -> int:
             print('READY:', init(args.workspace, args.name))
         elif args.action == 'publish':
             a, b = publish(args.workspace, args.name, args.key, args.title, args.technical_file, args.plain_file)
-            print('PUBLISHED:', a, '\nPLAIN:', b)
+            print('PUBLISHED:', a, '\nPLAIN:', b, '\nHTML:', b.with_suffix('.html'))
+        elif args.action == 'sync-html':
+            print('HTML_BACKFILLED:', sync_html(args.workspace, args.name))
         elif args.action == 'recover':
             folder = root_for(args.workspace, args.name)
             with exclusive(folder):

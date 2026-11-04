@@ -11,7 +11,7 @@
 | B · Build/integration | 本地分支或 worktree 合并、冲突审计、变更范围检查 | 不得用分支测试冒充集成测试 |
 | A · Actual tests | 集成后真实测试框架运行，断言实际业务结果，绑定新鲜报告和代码/输入指纹 | `FAIL`/`BLOCKED`/`未验证`，不能写 PASS |
 | M · Manual guide | A 满足后生成可照做的操作步骤，两轮评审补强并生成大白话副本 | 不得宣称完整交付 |
-| D · Docs | `.idea/docs/<方案>/` 成对 MD、编号幂等、一致性与可恢复校验 | 不得发布正式文档 |
+| D · Docs | `.idea/docs/<方案>/` 技术 MD + 大白话 MD/HTML、编号幂等、一致性与可恢复校验 | 不得发布正式文档 |
 
 ## 真实测试：什么才叫通过
 
@@ -43,11 +43,16 @@
 - 检查中英文 README 链接、安装命令、旧名称残留、MIT 和 CI 配置。
 - 核对 Git 提交及远端分支；不可把“本地 commit 成功”称为“push 成功”。
 
-**无 Python 时：** 宿主原生文件操作仍可创建双副本与稳定编号，但必须逐项手动复核，并标注“自动编号/一致性和事务回滚未验证”。核心业务测试的真实性要求不降低。
+**无 Python 时：** 宿主原生文件操作仍可创建技术 MD、大白话 MD/HTML 与稳定编号，但必须逐项手动复核，并标注“自动编号/一致性和事务回滚未验证”。核心业务测试的真实性要求不降低。
 
 ## v1.3.2 最终验收门禁
 
 - `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED` 仅说明源指纹/报告/用例映射一致，不是验收通过。
 - `--gate acceptance` 逐需求检查真实失败的反事实 JUnit XML、对应测试、日志 SHA-256 以及恢复 RUN。缺失或错误则阻断。
-- `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED` 也只证明证据形式可核查，尚须独立评审故障注入是否针对关键业务预期。
+- `COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED` 也只证明证据形式可核查，尚须独立评审故障注入是否针对关键业务预期。
 - `validate_docs.py --type manual` 不再在仅有一致性文件时放行；业务人工复验始终标记为 `未执行` 直到用户实际操作。
+
+
+## v1.3.3 增量门禁
+
+正式文档验证应同时核验技术 MD、大白话 MD、同名离线 HTML 和索引，技术版目录不生成 HTML。HTML 缺失、篡改或旧版本未补齐均阻断正式交付；参见 [HTML 说明](plain-html.md)。反事实验收新增生产源码变异快照、原始与变异源码 SHA、精确补丁及未改动的测试源码指纹；只有失败报告而没有生产源码修改证据时不能通过。该静态证明不能替代受控执行和独立人审。

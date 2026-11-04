@@ -20,7 +20,7 @@
 | 实施测试 | 评审合格后实施；缺测试用例先补充并评审两轮；合并后重新执行真实测试 |
 | 禁止虚假测试 | 拒绝 `echo PASS`、恒真断言、旧报告、未执行测试、伪造验收通过 |
 | 人工验收 | 自动化验收满足门禁后，生成可照做的手动测试步骤，不冒充用户完成操作 |
-| 双副本 | 技术 MD 与非技术读者可理解的“大白话解释”同编号、同版本、成对更新 |
+| 三格式交付 | 技术 MD + 大白话 MD + 同名离线 HTML（只在大白话目录），成组更新 |
 | 幂等文档 | `.idea/docs/<方案名称>/` 中按逻辑身份稳定编号，避免重复生成与重排 |
 
 ## 核心零依赖 · 可选增强
@@ -29,7 +29,7 @@
 
 - [code-pact](https://github.com/yeqiana/code-pact)：可选的代码审查与最小改动规范。
 - [gen-ui](https://github.com/yeqiana/gen-ui)：可选的结果与 Markdown 展示规范。
-- Python 3.11+：仅运行自带文档事务发布、证据与辅助测试校验工具时需要；不安装不会阻断 PlanShip 的核心流程。此时必须如实标注“自动门禁未执行”，不能声称双副本写入具有事务原子性。
+- Python 3.11+：仅运行自带文档事务发布、证据与辅助测试校验工具时需要；不安装不会阻断 PlanShip 的核心流程。此时必须如实标注“自动门禁未执行”，不能声称三格式文档同步写入具有事务原子性。
 
 **默认不联网、不执行安装脚本、不自动安装依赖。** 如用户明确提出安装可选 Skill，可以使用已有 Agent Skills 目录并指定当前宿主：
 
@@ -93,7 +93,7 @@ flowchart TD
     C -- 否 --> E[方案初稿与两轮评审补强]
     D --> E
     E --> F{本次仅写方案?}
-    F -- 是 --> G[交付成对 MD]
+    F -- 是 --> G[交付技术MD与大白话MD/HTML]
     F -- 否 --> H[检查测试用例缺口]
     H --> I[最小实施/本地集成]
     I --> J[真实测试与结果校验]
@@ -112,7 +112,9 @@ flowchart TD
 ├── 2. IM冷热库拆分-手动测试验收方案.md
 ├── 大白话解释/
 │   ├── 1. IM冷热库拆分-实施测试验收方案.md
-│   └── 2. IM冷热库拆分-手动测试验收方案.md
+│   ├── 1. IM冷热库拆分-实施测试验收方案.html
+│   ├── 2. IM冷热库拆分-手动测试验收方案.md
+│   └── 2. IM冷热库拆分-手动测试验收方案.html
 ├── evidence/               # 真实运行日志、报告和输入指纹
 └── .document-index.json    # 稳定编号索引
 ```
@@ -123,7 +125,20 @@ flowchart TD
 
 面向不了解技术的读者：先解释“要解决什么问题”“改动前后有何变化”，再用生活类比、**有文字说明的**图、可照做的操作、风险和专业术语解释，帮助普通人理解。并非机械替换术语或复制技术正文。自动脚本只能检查结构底线；能否真的看懂仍需真实读者反馈。
 
-详见 [大白话规范](references/plain-language.md) 与 [示例](examples/quickstart.md)。
+详见 [大白话规范](references/plain-language.md)、[离线 HTML 交付](docs/plain-html.md) 与 [示例](examples/quickstart.md)。新生成的 HTML 不需要联网或 JavaScript；`gen-ui` 是可选的排版指导，不是前置安装要求。
+
+## 大白话 HTML（v1.3.3）
+
+每份正式大白话 `.md` 旁边追加同编号 `.html`，**技术版 `.md` 不额外生成 HTML**。它采用 `gen-ui` 的层次、状态可见、响应式与可访问性原则，但不会运行其交互协议。离线 HTML 的 Mermaid 图展示为可读流程源码；文字图解仍在正文里。
+
+有 Python 时 `doc_registry.py publish` 自动同步发布并校验；旧的已登记大白话 MD 用下面命令补齐 HTML（不会覆盖已有未登记页面）：
+
+```powershell
+python .\scripts\doc_registry.py sync-html --workspace "D:\workspace\your-project" --name "方案名称"
+python .\scripts\doc_registry.py verify --workspace "D:\workspace\your-project" --name "方案名称"
+```
+
+没有 Python 时，Agent 可用宿主原生文件能力生成相同的静态 HTML，但自动一致性与事务原子性须标 `未验证`。
 
 ## 可选本地脚本检查（需要 Python）
 
@@ -191,6 +206,6 @@ MIT，详见 [LICENSE](LICENSE)。
 
 ## v1.3.2 反事实验收与路由安全
 
-`validate_evidence.py` 默认只校验证据文件一致性，返回 `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`，**不能据此批准业务验收**。最终验收证据使用 `--gate acceptance`，要求每个验收需求提供真实失败的负向 JUnit 用例、日志哈希以及恢复后通过的集成运行编号。通过后仍是 `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED`，必须审查故障注入的正确性与独立预期，不代替人工复验。详见 [证据契约](references/evidence-contract.md)。
+`validate_evidence.py` 默认只校验证据文件一致性，返回 `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`，**不能据此批准业务验收**。最终验收证据使用 `--gate acceptance`，要求每个验收需求提供真实失败的负向 JUnit 用例、日志哈希以及恢复后通过的集成运行编号。另外要求生产源码变异快照、变异前后指纹、精确差异补丁和未改动的测试源码指纹。通过后仍是 `COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED`，必须审查故障注入的正确性与独立预期，不代替人工复验。详见 [证据契约](references/evidence-contract.md)。
 
 `route_manager.py --install` 现在只会对不存在的宿主路由文件进行排他创建。已经存在 `AGENTS.md` 或 `CLAUDE.md` 时，返回需要人工合并的路由片段，不再自动覆盖，避免并发编辑导致用户规则丢失。

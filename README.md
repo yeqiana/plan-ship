@@ -24,7 +24,7 @@ Coding agents can skip review, modify unrelated features, declare `PASS` without
 | Implement | Review missing test cases before changes; allow local worktrees and final integration retest |
 | Test | Require real framework tests, meaningful assertions, fresh evidence and source fingerprints; never fake success |
 | Accept | Generate step-by-step manual verification instructions after automated acceptance gates pass |
-| Explain | Pair each formal Markdown deliverable with a nontechnical, diagram-supported explanation |
+| Explain | Pair each technical Markdown with a plain-language Markdown and same-stem offline HTML in `大白话解释/` |
 | Archive | Stable, idempotent numbered documents under `.idea/docs/<plan-name>/` |
 
 ## Requirements and optional integrations
@@ -103,7 +103,9 @@ Missing test fixtures are requested only if the actual requirement cannot be val
 ├── 2. <plan-name>-手动测试验收方案.md
 ├── 大白话解释/
 │   ├── 1. <plan-name>-实施测试验收方案.md
-│   └── 2. <plan-name>-手动测试验收方案.md
+│   ├── 1. <plan-name>-实施测试验收方案.html
+│   ├── 2. <plan-name>-手动测试验收方案.md
+│   └── 2. <plan-name>-手动测试验收方案.html
 ├── evidence/
 └── .document-index.json
 ```
@@ -118,6 +120,8 @@ python .\scripts\test_input_probe.py --workspace "D:\workspace\my-project"
 python .\scripts\route_manager.py              # read-only route check
 python .\scripts\route_manager.py --install    # opt-in: existing user instructions get a manual patch, never overwritten
 ```
+
+Each published plain-language Markdown also receives a same-stem **offline responsive HTML** companion (never for technical Markdown). It follows the optional [gen-ui](https://github.com/yeqiana/gen-ui) presentation guidelines; no script, CDN or external runtime is required to view it. Use `python scripts/doc_registry.py sync-html --workspace <project> --name <plan-name>` to backfill already indexed documents safely. See the [HTML guide](docs/plain-html.md).
 
 For former installations, see the [migration guide](docs/migration.md). Never overwrite existing user instructions without consent.
 
@@ -167,6 +171,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## v1.3.2 — Acceptance evidence is not just consistency
 
-A green JUnit report plus matching source hashes is **not** final business acceptance. `validate_evidence.py` defaults to `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`. Use `--gate acceptance` to require a failing counterfactual JUnit testcase, matching failure-log fingerprints and an associated restored integrated run for every accepted requirement; the result is still `COUNTERFACTUAL_EVIDENCE_CHECK_PASS_HUMAN_REVIEW_REQUIRED`. See [evidence contract](references/evidence-contract.md).
+A green JUnit report plus matching source hashes is **not** final business acceptance. `validate_evidence.py` defaults to `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`. Use `--gate acceptance` to require a failing counterfactual JUnit testcase, matching failure-log fingerprints, a concrete production-code mutation snapshot and exact diff, unchanged test-source fingerprint, and an associated restored integrated run for each accepted requirement. The result is still `COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED`; locally writable artifacts cannot prove who actually executed the mutation. See [evidence contract](references/evidence-contract.md).
 
 Opt-in `route_manager.py --install` uses exclusive creation for missing user instruction files. If `AGENTS.md` / `CLAUDE.md` already exists, it returns a **manual merge snippet** and never replaces it, avoiding the unprotected compare/rename race.

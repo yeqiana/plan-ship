@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.3 — 2026-11-04
+
+- 反事实验收添加生产源码变异前后 SHA-256、快照与可重建差异补丁，防止只改测试预期制造失败报告。
+- 加强 Python 恒真短路与不可达条件、Java 同源自我比较断言的保守识别。真实业务反向测试及独立审查仍必需。
+- 仅在 `大白话解释/` 为每份正式 Markdown 生成同名离线、响应式、安全转义 HTML，保持 Gen UI 呈现原则；技术版不生成 HTML。
+- 文档发布升级为技术 MD + 大白话 MD + 大白话 HTML + 索引的四文件事务；新增 `sync-html` 安全回填及篡改、回滚检查。
+- 核心 Skill 继续无需 WebCodex Runner、Python 或第三方 Skills；Python HTML 工具可选。
+
+
 ## 1.3.2 — 2026-11-04
 
 - Split optional evidence validation into consistency-only and strict counterfactual evidence gates. The default output can no longer be confused with final acceptance; manual document validation requires failed-case evidence and restored run correlation.
