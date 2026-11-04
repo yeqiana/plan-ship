@@ -134,7 +134,8 @@ flowchart TD
 有 Python 时 `doc_registry.py publish` 自动同步发布并校验；旧的已登记大白话 MD 用下面命令补齐 HTML（不会覆盖已有未登记页面）：
 
 ```powershell
-python .\scripts\doc_registry.py sync-html --workspace "D:\workspace\your-project" --name "方案名称"
+python .\scripts\doc_registry.py sync-html --workspace "D:\workspace\your-project" --name "方案名称"  # 只预览
+python .\scripts\doc_registry.py sync-html --workspace "D:\workspace\your-project" --name "方案名称" --apply  # 确认后同步
 python .\scripts\doc_registry.py verify --workspace "D:\workspace\your-project" --name "方案名称"
 ```
 
@@ -209,3 +210,11 @@ MIT，详见 [LICENSE](LICENSE)。
 `validate_evidence.py` 默认只校验证据文件一致性，返回 `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`，**不能据此批准业务验收**。最终验收证据使用 `--gate acceptance`，要求每个验收需求提供真实失败的负向 JUnit 用例、日志哈希以及恢复后通过的集成运行编号。另外要求生产源码变异快照、变异前后指纹、精确差异补丁和未改动的测试源码指纹。通过后仍是 `COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED`，必须审查故障注入的正确性与独立预期，不代替人工复验。详见 [证据契约](references/evidence-contract.md)。
 
 `route_manager.py --install` 现在只会对不存在的宿主路由文件进行排他创建。已经存在 `AGENTS.md` 或 `CLAUDE.md` 时，返回需要人工合并的路由片段，不再自动覆盖，避免并发编辑导致用户规则丢失。
+
+## v1.3.4：大白话 HTML 主入口与受控反事实证据
+
+每个方案目录的 `大白话解释/index.html` 是**离线阅读主入口**，按照正式编号列出已登记的全部大白话 HTML；技术版依然只保留 MD。`gen-ui` 提供排版、状态表达和无障碍呈现原则，**不是**启动/运行依赖。HTML 不执行 JavaScript，Markdown 仍是内容真相来源。
+
+**不要直接覆盖所有同名 HTML。** 仅有登记记录且现有 HTML 的 SHA 与登记一致时才自动重生成。未知来源、用户修改、孤立 HTML 或不匹配的文件必须保持原样并报告冲突。`sync-html` 默认**只预览**，确认后加 `--apply` 才实际写入，且 HTML、主入口和索引在同一事务中更新。
+
+最终反事实验收除快照/补丁外，还要关联 `scripts/run_mutation.py` 在临时工作副本中执行真实 pytest 的记录，检查实际被加载的变异生产源码 SHA、未改变的测试源码 SHA、失败用例和 JUnit/log run ID/nonce。**这不是可信硬件证明**，最终仍要求独立复核。Java/Maven/Gradle 的受控来源记录暂不支持自动验收，必须如实标记 `未验证`，不能用静态断言扫描冒充通过。

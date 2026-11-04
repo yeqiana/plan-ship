@@ -10,11 +10,13 @@ import os
 import re
 import sys
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
-from plain_html import render as render_plain_html
+from plain_html import render as render_plain_html, render_index
 
 INDEX = '.document-index.json'
+ENTRY = 'index.html'
 LOCK = '.document-index.lock'
 TRANSACTION = '.publish-transaction'
 SCHEMA = '1.0'
@@ -159,7 +161,7 @@ def recover_transaction(folder: Path) -> str:
             if not prepare.is_file() or prepare.is_symlink():
                 raise DocumentError('缺少 journal/prepare，无法证明目标文件未改动；需人工检查事务目录')
             plan = json.loads(prepare.read_text(encoding='utf-8'))
-            if plan.get('schema') != 'prepare-v1' or not isinstance(plan.get('files'), list) or len(plan['files']) not in (2, 3, 4):
+            if plan.get('schema') != 'prepare-v1' or not isinstance(plan.get('files'), list) or not 1 <= len(plan['files']) <= 256:
                 raise DocumentError('prepare schema 损坏，不能自动清理')
             permitted = {'prepare.json'} | {f'backup-{i}.bin' for i in range(len(plan['files']))}
             # Atomic writes may leave known temporary names when a process is
@@ -181,7 +183,7 @@ def recover_transaction(folder: Path) -> str:
             _clear_transaction(txn)
             return 'PREPARE_ABORTED_WITHOUT_TARGET_WRITES'
         manifest = json.loads(journal.read_text(encoding='utf-8'))
-        if manifest.get('schema') != 'v2.3' or len(manifest['files']) not in (2, 3, 4):
+        if manifest.get('schema') != 'v2.3' or not 1 <= len(manifest['files']) <= 256:
             raise ValueError('事务日志 schema 不符')
         items = manifest['files']
         states = []
@@ -286,6 +288,37 @@ def get_index(folder: Path, create: bool = False, logical_name: str | None = Non
     return data
 
 
+
+def _index_bytes(index: dict, folder: Path) -> bytes:
+    return render_index(index, str(index.get('plan_name') or folder.name))
+
+
+def _entry_payload(folder: Path, index: dict) -> tuple[bytes, bytes]:
+    entry_html = _index_bytes(index, folder)
+    index['index_html_sha256'] = digest(entry_html)
+    index_json = (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
+    return entry_html, index_json
+
+
+def _check_entry(folder: Path, index: dict) -> None:
+    explain_dir = folder / '大白话解释'
+    safe_file(explain_dir)
+    if explain_dir.resolve().parent != folder.resolve():
+        raise DocumentError('大白话解释目录不能是指向方案外部的符号链接或 junction')
+    entry = explain_dir / ENTRY
+    safe_file(entry)
+    recorded = index.get('index_html_sha256')
+    if entry.exists():
+        if not isinstance(recorded, str) or digest(entry.read_bytes()) != recorded:
+            raise DocumentError('大白话主入口 HTML 已存在但未登记、被修改，拒绝覆盖')
+    elif recorded:
+        # A missing indexed entry can be reconstructed only if its content
+        # is reproducible from the indexed documents.
+        expected = _index_bytes(index, folder)
+        if digest(expected) != recorded:
+            raise DocumentError('已登记主入口遗失且内容无法核验，拒绝恢复')
+
+
 def init(workspace: Path, name: str) -> Path:
     workspace.mkdir(parents=True, exist_ok=True)
     folder = root_for(workspace, name)
@@ -294,11 +327,19 @@ def init(workspace: Path, name: str) -> Path:
         index = get_index(folder, create=True, logical_name=name)
         for child in ('大白话解释', '.drafts'):
             destination = folder / child
-            if destination.is_symlink():
-                raise DocumentError(f'方案子目录禁止使用符号链接：{child}')
+            safe_file(destination)
+            if hasattr(destination, 'is_junction') and destination.is_junction():
+                raise DocumentError(f'方案子目录禁止使用 junction：{child}')
             destination.mkdir(exist_ok=True)
         if not (folder / INDEX).exists():
-            atomic(folder / INDEX, (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode())
+            if (folder / '大白话解释' / ENTRY).exists():
+                raise DocumentError('未登记的大白话入口 index.html 已存在，拒绝覆盖用户文件')
+            entry_data, index_data = _entry_payload(folder, index)
+            transactional_publish(folder, [(folder / '大白话解释' / ENTRY, entry_data), (folder / INDEX, index_data)])
+        else:
+            # Legacy folders do not yet have an entry; sync-html --apply
+            # upgrades them after verifying the indexed documents.
+            _check_entry(folder, index)
     return folder
 
 
@@ -339,6 +380,7 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
     with exclusive(folder):
         recover_transaction(folder)
         index = get_index(folder, logical_name=name)
+        _check_entry(folder, index)
         existing = index['documents'].get(key)
         if existing is not None and (not isinstance(existing, dict) or existing.get('title') != title):
             raise DocumentError('逻辑键已有另一标题；防止同一 key 指向不同文档')
@@ -378,49 +420,80 @@ def publish(workspace: Path, name: str, key: str, title: str, technical_file: Pa
             'number': number, 'title': title, 'filename': filename,
             'technical_sha256': hash_value, 'plain_sha256': digest(plain_data),
             'html_sha256': digest(html_data),
+            'updated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
         }
+        entry_data, index_data = _entry_payload(folder, index)
         transactional_publish(folder, [(tech_dest, tech_data), (plain_dest, plain_data),
-            (html_dest, html_data), (folder / INDEX, (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode())])
+            (html_dest, html_data), (folder / '大白话解释' / ENTRY, entry_data),
+            (folder / INDEX, index_data)])
     return tech_dest, plain_dest
 
 
-def sync_html(workspace: Path, name: str) -> int:
-    """Safely backfill HTML for registered legacy plain Markdown, never overwrite custom HTML.
+def sync_html(workspace: Path, name: str, *, dry_run: bool = True) -> int:
+    """Regenerate only PlanShip-owned HTML. CLI defaults to read-only preview.
 
-    Each document commits HTML and index together, so interrupted batches can
-    be resumed without corrupting earlier documents. No technical HTML is made.
+    Existing HTML is overwritten only when its old bytes match the index hash.
+    Unknown, user-edited and orphan HTML are rejected. Updates are one
+    journaled transaction so the entry and every document stay in sync.
     """
     folder = root_for(workspace, name)
     count = 0
+    if dry_run:
+        if _transaction_folder(folder).exists():
+            raise DocumentError('存在待恢复的发布事务，dry-run 拒绝修改')
+        return _sync_html_locked(folder, get_index(folder, logical_name=name), True)
     with exclusive(folder):
         recover_transaction(folder)
-        index = get_index(folder, logical_name=name)
-        for item in index['documents'].values():
-            if not isinstance(item, dict) or not isinstance(item.get('filename'), str):
-                raise DocumentError('旧版索引异常，禁止批量写入 HTML')
-            filename = item['filename']
-            technical = folder / filename
-            plain = folder / '大白话解释' / filename
-            target = plain.with_suffix('.html')
-            for path in (technical, plain, target):
-                safe_file(path)
-            if (not NUMERIC.fullmatch(filename) or
-                    not technical.is_file() or not plain.is_file() or
-                    digest(technical.read_bytes()) != item.get('technical_sha256') or
-                    digest(plain.read_bytes()) != item.get('plain_sha256')):
-                raise DocumentError('正式文档未经登记或曾被修改，不允许自动回填 HTML')
-            data = render_plain_html(plain.read_text(encoding='utf-8-sig'), Path(filename).stem)
-            if target.exists():
-                if item.get('html_sha256') != digest(target.read_bytes()) or data != target.read_bytes():
-                    raise DocumentError('已有 HTML 非本发布器登记的副本，拒绝覆盖')
+        return _sync_html_locked(folder, get_index(folder, logical_name=name), False)
+
+
+def _sync_html_locked(folder: Path, index: dict, dry_run: bool) -> int:
+    count = 0
+    _check_entry(folder, index)
+    registered = set()
+    payload: list[tuple[Path, bytes]] = []
+    for item in index['documents'].values():
+        if not isinstance(item, dict) or not isinstance(item.get('filename'), str):
+            raise DocumentError('旧版索引异常，禁止批量写入 HTML')
+        filename = item['filename']
+        technical = folder / filename
+        plain = folder / '大白话解释' / filename
+        target = plain.with_suffix('.html')
+        registered.add(target.name)
+        for path in (technical, plain, target):
+            safe_file(path)
+        if (not NUMERIC.fullmatch(filename) or not technical.is_file() or not plain.is_file() or
+                digest(technical.read_bytes()) != item.get('technical_sha256') or
+                digest(plain.read_bytes()) != item.get('plain_sha256')):
+            raise DocumentError('正式文档未经登记或曾被修改，不允许自动回填 HTML')
+        data = render_plain_html(plain.read_text(encoding='utf-8-sig'), Path(filename).stem)
+        recorded = item.get('html_sha256')
+        if target.exists():
+            if not isinstance(recorded, str) or digest(target.read_bytes()) != recorded:
+                raise DocumentError('已有 HTML 非本发布器登记的副本，拒绝覆盖')
+            if target.read_bytes() == data:
                 continue
-            if item.get('html_sha256'):
-                raise DocumentError('原已登记 HTML 遗失，需人工恢复，禁止静默重建')
-            item['html_sha256'] = digest(data)
-            payload = [(target, data), (folder / INDEX,
-                        (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))]
-            transactional_publish(folder, payload)
-            count += 1
+        elif recorded and digest(data) != recorded:
+            # It may have been rendered with an older generator. The source
+            # is intact and recorded, but the missing output needs review.
+            raise DocumentError('登记的旧 HTML 已遗失且旧生成版本不可核验，拒绝覆盖')
+        item['html_sha256'] = digest(data)
+        payload.append((target, data))
+        count += 1
+    explanation = folder / '大白话解释'
+    if explanation.exists():
+        for html_path in explanation.glob('*.html'):
+            if html_path.name != ENTRY and html_path.name not in registered:
+                raise DocumentError('检测到未登记的 HTML，拒绝自动迁移：' + html_path.name)
+    entry_html = _index_bytes(index, folder)
+    entry_path = explanation / ENTRY
+    if not entry_path.is_file() or entry_path.read_bytes() != entry_html:
+        payload.append((entry_path, entry_html))
+        count += 1
+    if not dry_run and payload:
+        index['index_html_sha256'] = digest(entry_html)
+        payload.append((folder / INDEX, (json.dumps(index, ensure_ascii=False, indent=2) + '\n').encode()))
+        transactional_publish(folder, payload)
     return count
 
 
@@ -492,6 +565,16 @@ def verify_all(workspace: Path, name: str) -> list[str]:
     except DocumentError as exc:
         return [str(exc)]
     errors: list[str] = []
+    entry = folder / '大白话解释' / ENTRY
+    try:
+        safe_file(entry)
+        expected_entry = _index_bytes(index, folder)
+        if (not entry.is_file() or
+                digest(entry.read_bytes()) != index.get('index_html_sha256') or
+                entry.read_bytes() != expected_entry):
+            errors.append('大白话主入口 index.html 缺失、被修改或与索引不同步')
+    except (OSError, DocumentError) as exc:
+        errors.append(f'大白话主入口验证失败：{exc}')
     documents = index['documents']
     known = set()
     seen_nums = set()
@@ -512,7 +595,7 @@ def verify_all(workspace: Path, name: str) -> list[str]:
         if file.name not in known:
             errors.append(f'存在无对应技术文档的大白话副本：{file.name}')
     for file in (folder / '大白话解释').glob('*.html'):
-        if file.with_suffix('.md').name not in known:
+        if file.name != ENTRY and file.with_suffix('.md').name not in known:
             errors.append(f'存在未登记或孤立的大白话 HTML：{file.name}')
     for file in folder.rglob('*.md'):
         relative = file.relative_to(folder)
@@ -528,6 +611,8 @@ def main() -> int:
         s = sub.add_parser(action)
         s.add_argument('--workspace', required=True, type=Path)
         s.add_argument('--name', required=True)
+        if action == 'sync-html':
+            s.add_argument('--apply', action='store_true', help='显式执行安全批量同步；默认只预览')
         if action == 'publish':
             s.add_argument('--key', required=True)
             s.add_argument('--title', required=True)
@@ -541,7 +626,8 @@ def main() -> int:
             a, b = publish(args.workspace, args.name, args.key, args.title, args.technical_file, args.plain_file)
             print('PUBLISHED:', a, '\nPLAIN:', b, '\nHTML:', b.with_suffix('.html'))
         elif args.action == 'sync-html':
-            print('HTML_BACKFILLED:', sync_html(args.workspace, args.name))
+            count = sync_html(args.workspace, args.name, dry_run=not args.apply)
+            print('HTML_SYNC_APPLIED:' if args.apply else 'HTML_DRY_RUN_CHANGES:', count)
         elif args.action == 'recover':
             folder = root_for(args.workspace, args.name)
             with exclusive(folder):

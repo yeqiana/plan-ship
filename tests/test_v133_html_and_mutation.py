@@ -51,7 +51,7 @@ class HtmlPresentationTests(unittest.TestCase):
         self.assertTrue(rendered.is_file())
         self.assertFalse(technical.with_suffix('.html').exists())
         self.assertEqual([],reg.verify_all(self.ws,'示例业务'))
-        self.assertEqual([x.name for x in explanation.parent.glob('*.html')],[rendered.name])
+        self.assertEqual({x.name for x in explanation.parent.glob('*.html')}, {rendered.name, 'index.html'})
         self.assertIn('plan-ship-source-sha256',rendered.read_text(encoding='utf8'))
 
     def test_republish_updates_html_same_number_and_detects_missing_or_tampered(self):
@@ -79,7 +79,7 @@ class HtmlPresentationTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.publish()
         self.assertFalse(list((self.folder/'大白话解释').glob('*.md')))
-        self.assertFalse(list((self.folder/'大白话解释').glob('*.html')))
+        self.assertEqual(['index.html'], [x.name for x in (self.folder/'大白话解释').glob('*.html')])
         self.assertEqual({},reg.get_index(self.folder)['documents'])
         self.assertEqual('CLEAN',reg.recover_transaction(self.folder))
 
@@ -91,14 +91,14 @@ class HtmlPresentationTests(unittest.TestCase):
         del metadata['documents']['plan']['html_sha256']
         index.write_text(json.dumps(metadata,ensure_ascii=False),encoding='utf8')
         html.unlink()
-        self.assertEqual(1,reg.sync_html(self.ws,'示例业务'))
-        self.assertEqual(0,reg.sync_html(self.ws,'示例业务'))
+        self.assertEqual(1,reg.sync_html(self.ws,'示例业务',dry_run=False))
+        self.assertEqual(0,reg.sync_html(self.ws,'示例业务',dry_run=False))
         self.assertEqual([],reg.verify_all(self.ws,'示例业务'))
         metadata=json.loads(index.read_text(encoding='utf8'))
         del metadata['documents']['plan']['html_sha256']
         index.write_text(json.dumps(metadata,ensure_ascii=False),encoding='utf8')
         with self.assertRaisesRegex(reg.DocumentError,'拒绝覆盖'):
-            reg.sync_html(self.ws,'示例业务')
+            reg.sync_html(self.ws,'示例业务',dry_run=False)
 
     def test_unregistered_existing_html_not_overwritten(self):
         target=self.folder/'大白话解释'/'1. 实施与测试方案.html'

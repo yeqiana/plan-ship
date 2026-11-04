@@ -24,6 +24,12 @@ def _literal_value(node: ast.AST):
     if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
             and node.func.id == 'bool' and len(node.args) == 1 and not node.keywords):
         return bool(_literal_value(node.args[0]))
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id in ('all', 'any') and len(node.args) == 1
+            and not node.keywords and isinstance(node.args[0], (ast.List, ast.Tuple))):
+        booleans = [_constant_bool(item) for item in node.args[0].elts]
+        if all(b is not None for b in booleans):
+            return all(booleans) if node.func.id == 'all' else any(booleans)
     if isinstance(node, ast.IfExp):
         condition = _constant_bool(node.test)
         if condition is not None:
@@ -347,7 +353,7 @@ def _java_source_has_assertion(path: Path, test_name: str) -> bool:
                         return True
                     if a.group(1) in ('assertTrue', 'assertFalse'):
                         expr = args[0].strip()
-                        if re.search(r'\|\|\s*(?:true|1\s*==\s*1)\b|\b(?:true|1\s*==\s*1)\s*\|\|', expr):
+                        if re.search(r'\|\|\s*(?:true|1\s*==\s*1|Boolean\.TRUE)\b|\b(?:true|1\s*==\s*1|Boolean\.TRUE)\s*\|\|', expr):
                             continue
                         comparison = re.match(r'(?s)^\s*(.+?)\s*(==|!=|<=|>=|<|>)\s*(.+?)\s*$', expr)
                         if comparison:

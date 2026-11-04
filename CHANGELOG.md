@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.4 — 2026-11-04
+
+- Add a main offline `大白话解释/index.html` entrance for each plan and regenerate it with registered HTML and document index in one recoverable transaction.
+- Make `sync-html` a read-only preview by default; `--apply` only rewrites indexed, hash-verified HTML. Reject custom/orphan pages without touching them.
+- Preserve escaped/table-code pipes and PASS/FAIL, render safe local Markdown images, and remove placeholder-token collision in offline HTML rendering.
+- Require actual controlled pytest mutation-run provenance (loaded production module SHA, test-source SHA, JUnit run ID/nonce, log) for automatic acceptance evidence; files remain locally forgeable and human review mandatory.
+- Classify Java/Python structural assertion checks as early warnings; unsupported Java mutation attestation remains unverified. PlanShip core stays free of WebCodex/Python/gen-ui dependencies.
+
+
 ## 1.3.3 — 2026-11-04
 
 - 反事实验收添加生产源码变异前后 SHA-256、快照与可重建差异补丁，防止只改测试预期制造失败报告。

@@ -121,7 +121,7 @@ python .\scripts\route_manager.py              # read-only route check
 python .\scripts\route_manager.py --install    # opt-in: existing user instructions get a manual patch, never overwritten
 ```
 
-Each published plain-language Markdown also receives a same-stem **offline responsive HTML** companion (never for technical Markdown). It follows the optional [gen-ui](https://github.com/yeqiana/gen-ui) presentation guidelines; no script, CDN or external runtime is required to view it. Use `python scripts/doc_registry.py sync-html --workspace <project> --name <plan-name>` to backfill already indexed documents safely. See the [HTML guide](docs/plain-html.md).
+Each published plain-language Markdown also receives a same-stem **offline responsive HTML** companion (never for technical Markdown). It follows the optional [gen-ui](https://github.com/yeqiana/gen-ui) presentation guidelines; no script, CDN or external runtime is required to view it. Use `python scripts/doc_registry.py sync-html --workspace <project> --name <plan-name>` for a **read-only migration preview**, then add `--apply` for indexed/verified files; unmanaged or manually modified HTML is never overwritten. Every plan includes a static offline `大白话解释/index.html` main entry linking all registered explanation HTML pages. See the [HTML guide](docs/plain-html.md).
 
 For former installations, see the [migration guide](docs/migration.md). Never overwrite existing user instructions without consent.
 
@@ -174,3 +174,11 @@ MIT, see [LICENSE](LICENSE).
 A green JUnit report plus matching source hashes is **not** final business acceptance. `validate_evidence.py` defaults to `CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED`. Use `--gate acceptance` to require a failing counterfactual JUnit testcase, matching failure-log fingerprints, a concrete production-code mutation snapshot and exact diff, unchanged test-source fingerprint, and an associated restored integrated run for each accepted requirement. The result is still `COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED`; locally writable artifacts cannot prove who actually executed the mutation. See [evidence contract](references/evidence-contract.md).
 
 Opt-in `route_manager.py --install` uses exclusive creation for missing user instruction files. If `AGENTS.md` / `CLAUDE.md` already exists, it returns a **manual merge snippet** and never replaces it, avoiding the unprotected compare/rename race.
+
+## v1.3.4 — Offline HTML index & controlled mutation evidence
+
+Every registered explanatory Markdown has a same-stem static HTML; `大白话解释/index.html` provides the **main entry** for all registered explanation documents. Technical documents remain Markdown only. Rendering follows [gen-ui](https://github.com/yeqiana/gen-ui) accessibility/presentation guidance without requiring or installing the Skill. See [HTML guide](docs/plain-html.md).
+
+Existing HTML is updated **only** when it is registered and still matches the prior hash; unknown/manual HTML is never overwritten. `sync-html` previews changes by default; `--apply` explicitly publishes all safe changes and the entry/index together.
+
+Final `validate_evidence.py --gate acceptance` additionally requires an instrumented `run_mutation.py` execution record linked to the actual production-source mutation, the loaded module SHA, unchanged test source, a failing real pytest testcase, and matching JUnit/log provenance. Java/other runner adapters are not yet implemented: mark those controlled checks **unverified**, never pretend that static assertion scanning proves acceptance. The record is **locally writable**, not cryptographic attestation; independent review still applies.

@@ -241,6 +241,83 @@ def validate_evidence(manifest_file: Path, plan_file: Path, workspace: Path) -> 
     return errors
 
 
+def _check_controlled_mutation_run(evidence: dict, workspace: Path, plan_dir: Path, aid: str, restored_run: dict | None) -> list[str]:
+    """Bind provenance artifacts to ONE instrumented execution.
+
+    Local writable data is auditable but not cryptographically authentic.
+    Independent reruns and reviewer inspection are still required.
+    """
+    errors = []
+    rel = evidence.get('mutation_run_record_path')
+    recorded_sha = evidence.get('mutation_run_record_sha256')
+    if not isinstance(rel, str) or not isinstance(recorded_sha, str):
+        return [f'{aid} ACCEPTANCE_NOT_VERIFIED：缺少受控变异执行记录及哈希']
+    record_file = local_file(workspace, rel)
+    if not record_file or not safe_inside(record_file, plan_dir) or 'evidence' not in record_file.relative_to(plan_dir).parts:
+        return [f'{aid} 受控变异执行记录必须位于本方案 evidence 目录']
+    if sha256_file(record_file) != recorded_sha:
+        return [f'{aid} 变异执行记录哈希不匹配']
+    try:
+        data = load_json(record_file)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [f'{aid} 变异执行记录无法解析：{exc}']
+    if (data.get('schema_version') != '1.0' or data.get('runner_version') != '1.3.4' or
+            data.get('runner') != 'pytest' or
+            data.get('runner_script_sha256') != sha256_file(Path(__file__).with_name('run_mutation.py')) or
+            not isinstance(data.get('command'), list) or
+            data.get('status') != 'MUTATION_KILLED_HUMAN_REVIEW_REQUIRED' or
+            data.get('execution_mode') != 'isolated_temporary_copy_not_security_sandbox' or
+            not re.fullmatch(r'MUT-[0-9A-F]{12}', str(data.get('run_id'))) or
+            not re.fullmatch(r'[0-9a-f]{32}', str(data.get('nonce'))) or
+            data.get('exit_code') == 0 or not isinstance(data.get('exit_code'), int)):
+        errors.append(f'{aid} 受控变异执行版本、模式或失败状态无效')
+    links = {'mutation_source_path': 'mutation_source_path',
+             'baseline_source_sha256': 'baseline_source_sha256',
+             'mutated_snapshot_path': 'mutated_snapshot_path',
+             'mutated_source_sha256': 'mutated_source_sha256',
+             'mutation_patch_path': 'mutation_patch_path',
+             'mutation_patch_sha256': 'mutation_patch_sha256',
+             'negative_report_path': 'negative_report_path',
+             'negative_report_sha256': 'negative_report_sha256',
+             'negative_log_path': 'negative_log_path',
+             'negative_log_sha256': 'negative_log_sha256',
+             'test_id': 'test_id'}
+    for field, bound in links.items():
+        if data.get(field) != evidence.get(bound):
+            errors.append(f'{aid} 执行记录 {field} 与正式反事实证据不一致')
+    mapped_sources = restored_run.get('test_sources', {}) if isinstance(restored_run, dict) else {}
+    if not isinstance(mapped_sources, dict) or mapped_sources.get(data.get('test_source_path')) != data.get('test_source_sha256'):
+        errors.append(f'{aid} 变异执行使用的测试源码不属于恢复后 RUN 映射的同一测试文件')
+    test_file = local_file(workspace, data.get('test_source_path'))
+    if not test_file or sha256_file(test_file) != data.get('test_source_sha256') or data.get('test_source_sha256') != evidence.get('negative_test_source_sha256'):
+        errors.append(f'{aid} 运行时测试源码与恢复后测试源码不一致')
+    trace = data.get('trace')
+    if (not isinstance(trace, dict) or trace.get('nodeid') != data.get('pytest_nodeid') or
+            trace.get('target_module_loaded') is not True or trace.get('call_failed') is not True or
+            trace.get('test_source_sha256') != data.get('test_source_sha256') or
+            data.get('mutated_source_sha256') not in trace.get('loaded_hashes', [])):
+        errors.append(f'{aid} 无法证明目标 pytest 测试在实际执行时加载了变异生产源码')
+    report = local_file(workspace, data.get('negative_report_path'))
+    log = local_file(workspace, data.get('negative_log_path'))
+    if (not report or not log or not safe_inside(report, plan_dir) or not safe_inside(log, plan_dir)
+            or sha256_file(report) != data.get('negative_report_sha256')
+            or sha256_file(log) != data.get('negative_log_sha256')):
+        errors.append(f'{aid} 受控执行报告/日志文件哈希不匹配')
+        return errors
+    try:
+        xml = ET.parse(report).getroot()
+        props = {item.get('name'):item.get('value') for item in xml.iter('property')}
+        if (props.get('plan_ship_mutation_run_id') != data.get('run_id') or
+                props.get('plan_ship_mutation_nonce') != data.get('nonce') or
+                props.get('plan_ship_mutated_source_sha256') != data.get('mutated_source_sha256')):
+            errors.append(f'{aid} JUnit 报告未绑定本次受控变异 run_id、nonce、源码指纹')
+    except ET.ParseError as exc:
+        errors.append(f'{aid} 受控执行 JUnit XML 解析失败：{exc}')
+    if data.get('run_id') not in log.read_text(encoding='utf8',errors='replace') or data.get('nonce') not in log.read_text(encoding='utf8',errors='replace'):
+        errors.append(f'{aid} 受控执行日志未记录本次变异 run_id/nonce')
+    return errors
+
+
 def validate_counterfactual_evidence(manifest_file: Path, plan_file: Path,
                                       workspace: Path) -> list[str]:
     """Additional FINAL gate. A green integration report is only consistency.
@@ -359,6 +436,7 @@ def validate_counterfactual_evidence(manifest_file: Path, plan_file: Path,
                 errors.append(f'{aid} 反事实报告没有目标测试真实失败的 JUnit 记录')
         except ET.ParseError as exc:
             errors.append(f'{aid} 反事实 JUnit 报告无法解析：{exc}')
+        errors.extend(_check_controlled_mutation_run(evidence, workspace, plan_dir, aid, restored_run))
     return errors
 
 
@@ -379,7 +457,7 @@ def main() -> int:
             print(" -", err)
         return 1
     if args.gate == 'acceptance':
-        print('COUNTERFACTUAL_MUTATION_ARTIFACTS_LINKED_HUMAN_REVIEW_REQUIRED: 生产源码变异快照、补丁、失败报告已关联；仍无法仅凭可写文件证明执行来源，必须独立审查故障注入与业务预期。')
+        print('CONTROLLED_MUTATION_RUN_LINKED_HUMAN_REVIEW_REQUIRED: 运行记录、加载的变异源码及 JUnit 报告已关联；本地证据仍可被伪造，必须独立复核。')
     else:
         print('CONSISTENCY_PASS_ACCEPTANCE_NOT_VERIFIED: 只验证证据文件一致性，未检查故障注入，不可宣称业务验收通过。')
     return 0

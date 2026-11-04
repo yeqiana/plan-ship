@@ -98,3 +98,18 @@ Python AST 静态检查补充拒绝明显不可达的 `if False` / `while False`
 `--gate acceptance` 必须校验变异发生在生产源码（不允许 `tests/`、`test-dir/` 等），当前已恢复文件 SHA 与基线一致，变异快照与源文件不同，并且 `difflib.unified_diff` 可从这两个文件精确重建登记的补丁。恢复后测试方法源码与 `negative_test_source_sha256` 一致。仅通过修改测试预期制造红色报告，没有真实生产变异快照及补丁时不能过门禁。
 
 **限制**：可修改的本地快照、补丁、XML 与日志仍无法给出可信执行来源证明。自动工具只能检查相互一致性；独立评审者必须核对实际执行命令、故障注入是否生效、期望是否独立、恢复是否完整。若不可核实，业务验收仍 `未验证`。
+
+## v1.3.4 受控生产变异执行记录
+
+之前的生产变异快照 + 补丁 + 失败报告均可独立制作，无法证明报告来自该变异代码的执行。现在最终 `--gate acceptance` 额外**必须**提供 `counterfactual.mutation_run_record_path` 和 `mutation_run_record_sha256`。
+
+可选执行器 `scripts/run_mutation.py` 目前仅支持 Python + pytest：从**原工作区复制一个临时副本**，在副本中写入登记的生产源码变异，运行指定测试，使用 pytest hook 检查被测模块在目标 testcase 执行期间实际加载的路径/变异 SHA，并比对测试源码 SHA；只有目标 testcase 真实失败、报告/日志与 run ID/nonce 绑定且原工作区未被修改，才写出独立运行记录。随后恢复版本的绿色测试记录仍必须符合原有门禁。
+
+```bash
+python scripts/run_mutation.py --workspace <project> --plan <official-plan.md> --source app.py --snapshot <plan/evidence/mutated.snapshot> --patch <plan/evidence/mutation.patch> --test-source tests/test_real.py --node-id tests/test_real.py::test_add --test-id tests.test_real::test_add
+python scripts/validate_evidence.py --gate acceptance --workspace <project> --plan <official-plan.md> --manifest <plan/evidence/manifest.json>
+```
+
+将执行器 stdout 中的 `record_path` / `record_sha256` 写入 `counterfactual` 的 `mutation_run_record_path` / `mutation_run_record_sha256` 字段。报告与日志路径、SHA 均来自运行记录，不能拼凑其他测试的红色报告。没有该可追溯记录时是 `ACCEPTANCE_NOT_VERIFIED`，不得称作已通过业务验收。
+
+**限定范围**：这是可审查的一致性链条，不是加密签名、OS 沙箱或可信硬件证明。拥有文件写权限者仍可伪造整个证据集；最终输出使用 `CONTROLLED_MUTATION_RUN_LINKED_HUMAN_REVIEW_REQUIRED` 并要求独立人员重跑/复核业务预期。Java、Maven、Gradle 暂未包含受控运行适配器，相关反事实验收应标记 `未验证`，不得把 Java 静态 AST/正则扫描视为通过证明。

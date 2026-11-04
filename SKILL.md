@@ -1,9 +1,9 @@
 ---
 name: plan-ship
-description: "PlanShip: plan, review, implement, test, and accept changes in Codex or Claude Code with minimal scope and verifiable evidence. Use for implementation/test/acceptance plans, two-round plan reviews, real automated testing, test-case gaps, and manual acceptance guides. Also trigger on Chinese requests: 方案编写、方案实施测试验收、全流程、两轮评审、手动验收方案. No WebCodex Runner, Python or third-party Skill is required for the core workflow."
+description: "PlanShip: plan, review, implement, test, and accept changes in Codex or Claude Code with minimal scope and verifiable evidence. Use for implementation/test/acceptance plans, two-round plan reviews, real automated testing, test-case gaps, and manual acceptance guides. Also trigger on Chinese requests: 方案编写、方案实施测试验收、全流程、两轮评审、手动验收方案. No WebCodex Runner, Python or third-party Skill is required for the core workflow. Published plain-language Markdown also has offline HTML and an index.html entry."
 ---
 
-# PlanShip v1.3.3 — Evidence-driven plan-to-acceptance workflow
+# PlanShip v1.3.4 — Evidence-driven plan-to-acceptance workflow
 
 PlanShip is a **workflow Skill**, not an Agent runtime, autonomous background service, or replacement for the project's test framework. Follow the user's language for communication and deliverables. Keep the machine-readable Skill identifier `plan-ship`, stable CLI arguments, evidence statuses, and directory conventions unchanged.
 
@@ -33,7 +33,7 @@ See [Skill discovery](references/skill-discovery.md) and [Gen UI integration](re
 3. **Git safety.** Preserve all pre-existing unstaged/staged user changes. Local branches, worktrees, commits and merges may be used with authorization and ownership boundaries. Normal PlanShip business-task execution forbids remote branch creation, push and PR/MR unless the user separately explicitly authorizes external Git actions. Never use `git add .` to mix unrelated changes. Re-run tests on the final integrated tree. Skill text is not a substitute for host-level network/credential permissions; no WebCodex runtime is required.
 4. **Commit format.** When committing, use the user's Chinese three-paragraph style: `feat: 中文说明\n\n模块名称1,模块名称2\n\n项目名称` (`fix`, `docs`, `init` are alternatives). Do not commit if the user prohibited it.
 5. **No fake tests or acceptance.** A printed `PASS`, build success alone, constant assertions, short-circuited assertions, fabricated reports, or stale test outputs do not demonstrate business correctness. Require actually executed framework test methods, assertions linked to production behavior, fresh JUnit XML where applicable, logs, case/requirement mapping, source/plan/fixture fingerprints and the final integrated code version. Apply isolated mutation / counterfactual tests when necessary: a deliberately incorrect business result should make the corresponding test genuinely fail, and the original code must be restored. Unrun, failed or unsupported checks remain `BLOCKED` / `未验证`; report uncertainty honestly. Static checks cannot prove semantic correctness.
-6. **Rendering and plain-language HTML.** Every *published* Markdown under `大白话解释/` must have a same-stem offline `.html` companion, following [Gen UI presentation guidance](references/gen-ui.md): legible hierarchy, mobile-friendly layout, safe escaped content, textual status and diagrams with text explanations. Do **not** generate HTML for technical Markdown. If `gen-ui` is installed and truly loaded in this host, apply it; otherwise follow the built-in presentation contract without blocking work. No JavaScript, external CDNs, imaginary interactions or fabricated tests. Markdown remains the authoritative content; HTML may not add/change business facts.
+6. **Rendering and plain-language HTML.** Every *published* Markdown under `大白话解释/` must have a same-stem offline `.html` companion and the folder must have an offline `index.html` main entrance, following [Gen UI presentation guidance](references/gen-ui.md): legible hierarchy, mobile-friendly layout, safe escaped content, textual status and diagrams with text explanations. Do **not** generate HTML for technical Markdown. If `gen-ui` is installed and truly loaded in this host, apply it; otherwise follow the built-in presentation contract without blocking work. No JavaScript, external CDNs, imaginary interactions or fabricated tests. Markdown remains the authoritative content; HTML may not add/change business facts.
 
 ## Document contract — stable numbering and paired explanations
 
@@ -46,6 +46,7 @@ All formal Markdown and related evidence belong in a **plan-named** directory un
   2. <plan-name>-测试用例补充.md         # only when a case gap exists
   3. <plan-name>-手动测试验收方案.md     # number 2 if no addendum exists
   大白话解释/                       # stable compatibility directory; content follows user language
+    index.html                      # offline entry for all registered explanations
     1. <plan-name>-实施测试验收方案.md
     1. <plan-name>-实施测试验收方案.html   # only plain-language companions
     2. <plan-name>-测试用例补充.md
@@ -91,6 +92,17 @@ python "<SKILL_ROOT>/scripts/doc_registry.py" recover --workspace "<project-root
 6. Summarize exact results, blockers, touched files, local Git status, real commands, logs and both document paths. No unsupported acceptance claim.
 
 Detailed contracts: [plan module](references/module-plan.md), [execution module](references/module-execute.md), [review gates](references/review-gates.md), [evidence](references/evidence-contract.md).
+
+
+## v1.3.4 mandatory HTML delivery and controlled negative tests
+
+- **HTML main entrance (mandatory for formal published explanations):** every `<plan-name>/大白话解释/` contains `index.html`, linking only registered plain-language HTML by original numbering; titles, recorded update times and explicit **registered / semantic review pending** state appear on the entry. All HTML is static, offline, readable on mobile, with no JavaScript or externally loaded renderer. Technical MD stays MD-only. Preserve source content including code-span pipes, escaped pipes, `PASS`/`FAIL`/`BLOCKED` states, local safe Markdown image links, and literal placeholder-like text. Mermaid source and accompanying explanation stay readable when an actual renderer is unavailable.
+- **Use Gen UI as a design guideline:** when `gen-ui` (https://github.com/yeqiana/gen-ui) has truly been loaded by the current host, follow its accessible hierarchy, scannable evidence and responsive layout advice. Otherwise follow the built-in equivalent; never silently install `gen-ui` or claim support for an interactive protocol. The **original plain MD is authoritative**, HTML must not add claims or alter verdicts.
+- **Never blanket-overwrite existing HTML.** Only existing files recorded in `.document-index.json` with a matching current SHA-256 can be regenerated automatically. Unindexed HTML, manual edits, unsafe links, symlinks and mismatched hashes are `BLOCKED`; preserve the user's files and present a review list. For historical projects, run optional `doc_registry.py sync-html --workspace <project> --name <plan>` first **without** `--apply` to preview, then use `--apply` only after reviewing conflicts; `publish` updates HTML, main entrance and index in the same recoverable transaction. No Python means the host can write corresponding static HTML manually but must explicitly mark hash/atomicity guarantees `未验证`.
+- **Final evidence must bind execution, not just files.** The optional `scripts/run_mutation.py` uses a temporary copy of the project to replace an approved Python production source with a reproducible mutation, run the same real pytest test, and record runtime-loaded module SHA, test-source SHA, JUnit failure, log, unique run ID/nonce and a linked record. Attach `counterfactual.mutation_run_record_path` and `mutation_run_record_sha256` to the final manifest alongside existing mutation evidence; missing/mismatched execution linkage must fail `--gate acceptance`. Test-source-only red reports **never** pass automatically. Python/Java static assertion scanning is an early warning only, **not a semantic proof**.
+- **Trust boundary:** the temporary copy is not an OS isolation sandbox, and all local record files can be forged by a privileged actor. `CONTROLLED_MUTATION_RUN_LINKED_HUMAN_REVIEW_REQUIRED` means the linkage is internally consistent, **not** independent attestation or actual user acceptance. The optional controlled Python runner currently supports pytest; for Java/Maven/Gradle the production mutation test must be independently witnessed, and the automatic final evidence gate remains `未验证` until a supported provenance adapter exists. Do not invent one or relax validation.
+
+See [HTML publishing guide](docs/plain-html.md), [evidence contract](references/evidence-contract.md), and [quality gates](docs/quality-gates.md).
 
 ## Gate summary
 
